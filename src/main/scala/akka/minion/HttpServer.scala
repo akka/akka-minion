@@ -18,12 +18,13 @@ object HttpServer {
 
 
 
-  def props(ghService: ActorRef, bot: ActorRef, dashboard: ActorRef): Props =
-    Props(new HttpServer(ghService, bot, dashboard))
+  def props(settings: App.Settings, ghService: ActorRef, bot: ActorRef, dashboard: ActorRef): Props =
+    Props(new HttpServer(settings, ghService, bot, dashboard))
 
 }
 
 class HttpServer(
+    val settings: App.Settings,
     val githubService: ActorRef,
     val bot: ActorRef,
     val dashboard: ActorRef
@@ -32,7 +33,6 @@ class HttpServer(
 
   private implicit val materializer = ActorMaterializer()
   private var bindingFuture: Future[Http.ServerBinding] = _
-  private val port = context.system.settings.config.getInt("akka.minion.http-port")
 
   implicit val timeout = Timeout(3.seconds)
 
@@ -68,8 +68,8 @@ class HttpServer(
 
 
   override def preStart(): Unit = {
-    bindingFuture = Http(context.system).bindAndHandle(route, "localhost", port)
-    log.info(s"HTTP server started on port $port")
+    bindingFuture = Http(context.system).bindAndHandle(route, "localhost", settings.httpPort)
+    log.info(s"HTTP server started on port ${settings.httpPort}")
   }
 
   override def postStop(): Unit = {

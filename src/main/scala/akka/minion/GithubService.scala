@@ -14,6 +14,7 @@ import HttpMethods._
 import akka.Done
 import akka.actor.Status.Failure
 import akka.http.scaladsl.model.headers.GenericHttpCredentials
+import akka.minion.App.Settings
 
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
@@ -25,7 +26,8 @@ object GithubService extends DefaultJsonProtocol {
   case object Refresh
   case class ClientFailed(ex: Throwable)
 
-  def props(listeners: Seq[ActorRef]): Props = Props(new GithubService(listeners))
+  def props(settings: Settings, listeners: Seq[ActorRef]): Props = Props(new GithubService(settings, listeners))
+
   type Date = Option[Either[String, Long]]
 
   object CommitStatusConstants {
@@ -163,23 +165,18 @@ object GithubService extends DefaultJsonProtocol {
 
 }
 
-class GithubService(listeners: Seq[ActorRef]) extends Actor with ActorLogging {
+class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor with ActorLogging {
   import GithubService._
   import context.dispatcher
 
   private implicit val mat = ActorMaterializer()
 
-  private val token = context.system.settings.config.getString("akka.minion.api-key")
-  private val rateLimitPerHour = context.system.settings.config.getInt("akka.minion.max-api-calls-per-hour")
-  private val refreshInterval =
-    Duration(context.system.settings.config.getDuration("akka.minion.poll-interval", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
-
-  private val timer = context.system.scheduler.schedule(1.second, refreshInterval, self, Refresh)
+  private val timer = context.system.scheduler.schedule(1.second, settings.pollInterval, self, Refresh)
 
   // Throttled global connection pool
   val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
     Source.queue[(HttpRequest, Promise[HttpResponse])](256, OverflowStrategy.backpressure)
-      .throttle(rateLimitPerHour, 1.hour, 100, ThrottleMode.shaping)
+      .throttle(settings.apiCallPerHour, 1.hour, 100, ThrottleMode.shaping)
       .via(Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
       .toMat(Sink.foreach { case (response, promise) =>
         promise.tryComplete(response)
@@ -193,7 +190,7 @@ class GithubService(listeners: Seq[ActorRef]) extends Actor with ActorLogging {
     val promise = Promise[HttpResponse]
 
     val request = req
-      .addHeader(headers.Authorization(GenericHttpCredentials("token", token)))
+      .addHeader(headers.Authorization(GenericHttpCredentials("token", settings.token)))
       .addHeader(headers.Accept(MediaRange.custom("application/vnd.github.black-cat-preview+json")))
 
     queue.offer(request, promise).flatMap(_ => promise.future)

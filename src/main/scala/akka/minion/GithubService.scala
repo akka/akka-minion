@@ -209,13 +209,11 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
 
   override def preStart(): Unit = {
     log.info("Starting Github service")
-
-    self ! Refresh
-    timer.cancel()
   }
 
   override def postStop(): Unit = {
     log.info("Stopped Github service")
+    timer.cancel()
   }
 
   override def receive: Receive = {

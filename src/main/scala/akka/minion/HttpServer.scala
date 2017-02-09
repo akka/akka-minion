@@ -77,7 +77,7 @@ class HttpServer(
 
 
   override def preStart(): Unit = {
-    bindingFuture = Http(context.system).bindAndHandle(route, "localhost", settings.httpPort)
+    bindingFuture = Http(context.system).bindAndHandle(route, "0.0.0.0", settings.httpPort)
     log.info(s"HTTP server started on port ${settings.httpPort}")
   }
 

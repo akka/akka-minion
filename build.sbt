@@ -23,3 +23,5 @@ libraryDependencies += "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpV
 libraryDependencies += "com.lihaoyi" %% "scalatags" % "0.6.3"
 
 libraryDependencies += "io.spray" %%  "spray-json" % "1.3.3"
+
+enablePlugins(JavaAppPackaging)

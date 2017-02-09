@@ -38,7 +38,7 @@ object App {
       def asList(cfg: ConfigList): Seq[String] = {
         val itr = cfg.iterator()
         var result = Vector.empty[String]
-        while (itr.hasNext) result :+= itr.next().render()
+        while (itr.hasNext) result :+= itr.next().unwrapped().asInstanceOf[String]
         result
       }
 

@@ -60,6 +60,8 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
       sender() ! MainDashboardReply(lastMainReport)
   }
 
+
+
   private def createMainDashboard(report: FullReport): MainDashboardData = {
     val entries = report.pulls.map { pull =>
       val comments = report.comments(pull)
@@ -71,9 +73,11 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
         title = pull.title,
         lastUpdated = comments.last.updated_at.get.fold(_.toString, _.toString),
         people = comments.iterator.map(_.user).collect {
-          case Some(user) => user.login
+          case Some(user) if !settings.bots(user.login) => user.login
         }.toSet,
-        lastActor = comments.last.user.get.login,
+        lastActor = comments.map(_.user).collect {
+          case Some(user) if !settings.bots(user.login) => user.login
+        }.lastOption.getOrElse(""),
         mergeable = pull.mergeable,
         statusOk =
           if (status.statuses.isEmpty) None
@@ -84,7 +88,7 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
 
     }
 
-    MainDashboardData(report.repo.name, entries)
+    MainDashboardData(report.repo.full_name, entries)
   }
 
 }

@@ -116,6 +116,8 @@ object Template {
     data match {
       case None => alert(p("No dashboard data is available"), "info")
       case Some(report) =>
+        val repoUrl = s"https://github.com/${report.repo}"
+
         div(
           h2(s"Report on ${report.repo}"),
           table(
@@ -128,10 +130,10 @@ object Template {
             tbody(
               for (pull <- report.pulls) yield {
                 tr(
-                  td(s"${pull.number}: ${pull.title}"),
+                  td(a(href:=repoUrl + "/pull/" + pull.number, s"${pull.number}: ${pull.title}")),
                   td(pull.lastUpdated),
-                  td(pull.lastActor),
                   td(pull.people.mkString(", ")),
+                  td(pull.lastActor),
                   td(threeState(pull.mergeable)),
                   td(threeState(pull.statusOk)),
                   td(pull.reviewedOk)

@@ -5,9 +5,13 @@ import akka.stream.ActorMaterializer
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
+import akka.minion.Dashboard.{GetMainDashboard, MainDashboardData, MainDashboardReply}
 import akka.util.Timeout
+import akka.pattern.ask
+import akka.pattern.AskTimeoutException
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scalatags.Text.TypedTag
 
 object HttpServer {
@@ -30,6 +34,8 @@ class HttpServer(
   private var bindingFuture: Future[Http.ServerBinding] = _
   private val port = context.system.settings.config.getInt("akka.minion.http-port")
 
+  implicit val timeout = Timeout(3.seconds)
+
 
   private val route =
     pathSingleSlash {
@@ -41,18 +47,17 @@ class HttpServer(
         complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
       }
     } ~
-    path("hello") {
+    path("overview") {
       get {
-        complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
+        val reportFuture =
+          (dashboard ? GetMainDashboard).mapTo[MainDashboardReply]
+          .map(reply => Template(Template.mainDashboard(reply.report)))
+
+        complete(reportFuture)
       }
     }
 
   def serviceStatus(service: ActorRef): Future[String] = {
-    import scala.concurrent.duration._
-    import akka.pattern.ask
-    import akka.pattern.AskTimeoutException
-
-    implicit val timeout = Timeout(3.seconds)
 
     (service ? App.ServicePing).mapTo[App.ServicePong.type]
       .map(_ => "Up")
@@ -105,6 +110,49 @@ object Template {
     HttpEntity(ContentTypes.`text/html(UTF-8)`, tags.render)
 
   }
+
+
+  def mainDashboard(data: Option[MainDashboardData]): TypedTag[String] = {
+    data match {
+      case None => alert(p("No dashboard data is available"), "info")
+      case Some(report) =>
+        div(
+          h2(s"Report on ${report.repo}"),
+          table(
+            `class`:="table, table-bordered",
+            thead(
+              tr(
+                th("Title"), th("Last Updated"), th("People"), th("Last actor"), th("M"), th("S"), th("R")
+              )
+            ),
+            tbody(
+              for (pull <- report.pulls) yield {
+                tr(
+                  td(s"${pull.number}: ${pull.title}"),
+                  td(pull.lastUpdated),
+                  td(pull.lastActor),
+                  td(pull.people.mkString(", ")),
+                  td(threeState(pull.mergeable)),
+                  td(threeState(pull.statusOk)),
+                  td(pull.reviewedOk)
+                )
+              }
+            )
+          )
+        )
+    }
+
+  }
+
+  def threeState(state: Option[Boolean]): TypedTag[String] = {
+    state match {
+      case None => p("")
+      case Some(bool) => p(bool.toString())
+    }
+  }
+
+  def alert(content: TypedTag[String], kind: String): TypedTag[String] =
+    div(`class`:=s"alert alert-$kind", role:="alert", content)
 
   def panel(heading: String, content: TypedTag[String]): TypedTag[String] = {
     div(

@@ -1,13 +1,14 @@
 package akka.minion
 
 import akka.actor.{Actor, ActorLogging, Props}
+import akka.minion.App.Settings
 import akka.minion.GithubService.{CommitStatusConstants, FullReport}
 
 import scala.collection.immutable.Seq
 
 object Dashboard {
 
-  def props(): Props = Props(new Dashboard)
+  def props(settings: Settings): Props = Props(new Dashboard(settings))
 
   case object GetMainDashboard
   case class MainDashboardReply(report: Option[MainDashboardData])
@@ -34,7 +35,7 @@ object Dashboard {
 
 }
 
-class Dashboard extends Actor with ActorLogging {
+class Dashboard(settings: Settings) extends Actor with ActorLogging {
   import akka.minion.Dashboard._
 
   private var lastMainReport: Option[MainDashboardData] = None
@@ -54,7 +55,6 @@ class Dashboard extends Actor with ActorLogging {
     case report: FullReport =>
       log.info(s"Received fresh report for ${report.repo}")
       lastMainReport = Some(createMainDashboard(report))
-      println(lastMainReport)
 
     case GetMainDashboard =>
       sender() ! MainDashboardReply(lastMainReport)

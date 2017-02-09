@@ -1,15 +1,16 @@
 package akka.minion
 
 import akka.actor.{Actor, ActorLogging, Props}
+import akka.minion.App.Settings
 import akka.minion.GithubService.FullReport
 
 object Bot {
 
-  def props(): Props = Props(new Bot)
+  def props(settings: Settings): Props = Props(new Bot(settings))
 
 }
 
-class Bot extends Actor with ActorLogging {
+class Bot(settingts: Settings) extends Actor with ActorLogging {
 
   override def preStart(): Unit = {
     log.info("Minion bot started")

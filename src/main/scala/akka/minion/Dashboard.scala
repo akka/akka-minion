@@ -1,6 +1,7 @@
 package akka.minion
 
 import akka.actor.{Actor, ActorLogging, Props}
+import akka.minion.GithubService.FullReport
 
 object Dashboard {
 
@@ -20,5 +21,7 @@ class Dashboard extends Actor with ActorLogging {
 
   override def receive: Receive = {
     case App.ServicePing => sender() ! App.ServicePong
+    case report: FullReport =>
+      log.info(s"Received fresh report for ${report.repo}")
   }
 }

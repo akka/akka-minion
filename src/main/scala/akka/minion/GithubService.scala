@@ -1,6 +1,8 @@
 package akka.minion
 
-import akka.actor.{Actor, ActorLogging, Props}
+import java.util.concurrent.TimeUnit
+
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.stream.{ActorMaterializer, OverflowStrategy, ThrottleMode}
@@ -9,6 +11,8 @@ import spray.json._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import HttpMethods._
+import akka.Done
+import akka.actor.Status.Failure
 import akka.http.scaladsl.model.headers.GenericHttpCredentials
 
 import scala.concurrent.{Future, Promise}
@@ -19,8 +23,9 @@ import scala.collection.immutable.Seq
 object GithubService extends DefaultJsonProtocol {
 
   case object Refresh
+  case class ClientFailed(ex: Throwable)
 
-  def props(): Props = Props(new GithubService)
+  def props(listeners: Seq[ActorRef]): Props = Props(new GithubService(listeners))
   type Date = Option[Either[String, Long]]
 
   object CommitStatusConstants {
@@ -141,24 +146,31 @@ object GithubService extends DefaultJsonProtocol {
 
 }
 
-class GithubService extends Actor with ActorLogging {
+class GithubService(listeners: Seq[ActorRef]) extends Actor with ActorLogging {
   import GithubService._
   import context.dispatcher
 
   private implicit val mat = ActorMaterializer()
 
-  val repos = Vector("akka/akka", "akka/alpakka")
-  val token = context.system.settings.config.getString("akka.minion.api-key")
-  val rateLimitPerHour = context.system.settings.config.getInt("akka.minion.max-api-calls-per-hour")
+  private val token = context.system.settings.config.getString("akka.minion.api-key")
+  private val rateLimitPerHour = context.system.settings.config.getInt("akka.minion.max-api-calls-per-hour")
+  private val refreshInterval =
+    Duration(context.system.settings.config.getDuration("akka.minion.poll-interval", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
+
+  private val timer = context.system.scheduler.schedule(1.second, refreshInterval, self, Refresh)
 
   // Throttled global connection pool
-  val queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])] =
+  val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
     Source.queue[(HttpRequest, Promise[HttpResponse])](256, OverflowStrategy.backpressure)
       .throttle(rateLimitPerHour, 1.hour, 100, ThrottleMode.shaping)
       .via(Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
-      .to(Sink.foreach { case (response, promise) =>
+      .toMat(Sink.foreach { case (response, promise) =>
         promise.tryComplete(response)
-      }).run()
+      })(Keep.both).run()
+
+  clientFuture.onFailure { case ex: Throwable =>
+    self ! ClientFailed(ex)
+  }
 
   private def throttledRequest(req: HttpRequest): Future[HttpResponse] = {
     val promise = Promise[HttpResponse]
@@ -182,7 +194,7 @@ class GithubService extends Actor with ActorLogging {
     log.info("Starting Github service")
 
     self ! Refresh
-
+    timer.cancel()
   }
 
   override def postStop(): Unit = {
@@ -191,6 +203,13 @@ class GithubService extends Actor with ActorLogging {
 
   override def receive: Receive = {
     case Refresh => refresh()
+    case ClientFailed(ex) =>
+      throw ex
+    case report: FullReport =>
+      log.info("Refreshed report")
+      listeners.foreach(_ ! report)
+    case Failure(ex) =>
+      log.error(ex, "Failed to refresh Github status")
   }
 
 
@@ -227,7 +246,9 @@ class GithubService extends Actor with ActorLogging {
 
   private def refresh(): Unit = {
     log.info("Refreshing Github data")
-    createReport("akka/akka").onComplete(println)
+    import akka.pattern.pipe
+
+    createReport("akka/akka").pipeTo(self)
 
   }
 

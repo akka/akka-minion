@@ -45,9 +45,9 @@ class App extends Actor {
   override def receive: Receive = Actor.emptyBehavior
 
   override def preStart(): Unit = {
-    val ghService = context.watch(context.actorOf(GithubService.props(), "github-service"))
     val bot = context.watch(context.actorOf(Bot.props(), "bot"))
     val dashboard = context.watch(context.actorOf(Dashboard.props(), "dashboard"))
+    val ghService = context.watch(context.actorOf(GithubService.props(List(bot, dashboard)), "github-service"))
     context.watch(context.actorOf(HttpServer.props(ghService, bot, dashboard), "http-server"))
   }
 }

@@ -111,6 +111,20 @@ object GithubService extends DefaultJsonProtocol {
   case class PullRequestReviewCommentEvent(action: String, pull_request: PullRequest, comment: PullRequestComment, repository: Repository)
   case class IssueCommentEvent(action: String, issue: Issue, comment: IssueComment, repository: Repository)
 
+  object ReviewStatusConstants {
+    final val COMMENTED = "COMMENTED"
+    final val CHANGES_REQUESTED = "CHANGES_REQUESTED"
+    final val APPROVED = "APPROVED"
+  }
+
+  case class PullRequestReview(user: User, body: String, submitted_at: Date, state: String) {
+    import ReviewStatusConstants._
+
+    def commented = state == COMMENTED
+    def changesRequested = state == CHANGES_REQUESTED
+    def approved = state == APPROVED
+  }
+
   private type RJF[x] = RootJsonFormat[x]
   implicit lazy val _fmtUser             : RJF[User]                          = jsonFormat1(User)
   implicit lazy val _fmtAuthor           : RJF[Author]                        = jsonFormat2(Author)
@@ -137,11 +151,14 @@ object GithubService extends DefaultJsonProtocol {
   implicit lazy val _fmtPRCommentEvent   : RJF[PullRequestReviewCommentEvent] = jsonFormat4(PullRequestReviewCommentEvent)
   implicit lazy val _fmtIssueCommentEvent: RJF[IssueCommentEvent]             = jsonFormat4(IssueCommentEvent)
 
+  implicit lazy val _fmtPullRequestReview: RJF[PullRequestReview]             = jsonFormat4(PullRequestReview)
+
   case class FullReport(
     repo: Repository,
     pulls: Seq[PullRequest],
     comments: Map[PullRequest, Seq[IssueComment]],
-    statuses: Map[PullRequest, CombiCommitStatus]
+    statuses: Map[PullRequest, CombiCommitStatus],
+    reviews: Map[PullRequest, Seq[PullRequestReview]]
   )
 
 }
@@ -175,8 +192,11 @@ class GithubService(listeners: Seq[ActorRef]) extends Actor with ActorLogging {
   private def throttledRequest(req: HttpRequest): Future[HttpResponse] = {
     val promise = Promise[HttpResponse]
 
-    queue.offer(req.addHeader(headers.Authorization(GenericHttpCredentials("token", token))), promise)
-      .flatMap(_ => promise.future)
+    val request = req
+      .addHeader(headers.Authorization(GenericHttpCredentials("token", token)))
+      .addHeader(headers.Accept(MediaRange.custom("application/vnd.github.black-cat-preview+json")))
+
+    queue.offer(request, promise).flatMap(_ => promise.future)
   }
 
   private def throttledJson[T: RootJsonFormat](req: HttpRequest): Future[T] = {
@@ -233,13 +253,21 @@ class GithubService(listeners: Seq[ActorRef]) extends Actor with ActorLogging {
       Future.sequence(statuses).map(_.toMap)
     }
 
+    val pullReviewsFuture = pullsFuture.flatMap { pulls =>
+      val pullReviews = pulls.map { pull =>
+        api[Seq[PullRequestReview]](repo, s"/pulls/${pull.number}/reviews").map(pull -> _)
+      }
+      Future.sequence(pullReviews).map(_.toMap)
+    }
+
     for {
       repo <- repoFuture
       pulls <- pullsFuture
       pullComments <- pullCommentsFuture
       pullStatus <- pullStatusFuture
+      pullReviews <- pullReviewsFuture
     } yield FullReport(
-      repo, pulls, pullComments, pullStatus
+      repo, pulls, pullComments, pullStatus, pullReviews
     )
 
   }

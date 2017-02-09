@@ -5,7 +5,8 @@ import akka.stream.ActorMaterializer
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
-import akka.minion.Dashboard.{GetMainDashboard, MainDashboardData, MainDashboardReply}
+import akka.minion.Dashboard._
+import akka.minion.GithubService.PullRequest
 import akka.util.Timeout
 import akka.pattern.ask
 import akka.pattern.AskTimeoutException
@@ -52,6 +53,15 @@ class HttpServer(
         val reportFuture =
           (dashboard ? GetMainDashboard).mapTo[MainDashboardReply]
           .map(reply => Template(Template.mainDashboard(reply.report)))
+
+        complete(reportFuture)
+      }
+    } ~
+    path("personal" / Segment) { person =>
+      get {
+        val reportFuture =
+          (dashboard ? GetPersonalDashboard(person)).mapTo[PersonalDashboardReply]
+            .map(reply => Template(Template.personalDashboard(reply.report)))
 
         complete(reportFuture)
       }
@@ -121,7 +131,7 @@ object Template {
         div(
           h2(s"Report on ${report.repo}"),
           table(
-            `class`:="table, table-bordered",
+            `class`:="table table-condensed",
             thead(
               tr(
                 th("Title"), th("Last Updated"), th("People"), th("Last actor"), th("M"), th("S"), th("R")
@@ -144,6 +154,51 @@ object Template {
         )
     }
 
+  }
+
+  def personalDashboard(data: Option[PersonalDashboard]): TypedTag[String] = {
+    data match {
+      case None => alert(p("No dashboard data is available"), "info")
+      case Some(report) =>
+        val repoUrl = s"https://github.com/${report.repo}"
+
+        def renderAction(action: PrAction): TypedTag[String] = action match {
+          case NoAction => p("N/A")
+          case PleaseReview => p("Please review")
+          case PleaseFix => p("Fix failure")
+          case PleaseResolve => p("Act on review")
+          case PleaseRebase => p("Rebase")
+        }
+
+        def mkTable(data: Seq[PersonalDashboardEntry]): TypedTag[String] =
+          table(
+            `class`:="table table-condensed",
+            thead(
+              tr(
+                th("Title"), th("Action")
+              )
+            ),
+            tbody(
+              for (entry <- data if entry.action != NoAction) yield {
+                tr(
+                  td(a(href:=repoUrl + "/pull/" + entry.pr.number, s"${entry.pr.number}: ${entry.pr.title}")),
+                  td(renderAction(entry.action))
+                )
+              }
+            )
+          )
+
+
+        div(
+          h1(s"Personal report for ${report.person}"),
+          h2("Own PRs needing attention"),
+          mkTable(report.ownPrs),
+          h2("Team PRs needing attention"),
+          mkTable(report.teamPrs),
+          h2("External PRs needing attention"),
+          mkTable(report.externalPrs)
+        )
+    }
   }
 
   def threeState(state: Option[Boolean]): TypedTag[String] = {

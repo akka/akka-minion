@@ -205,7 +205,7 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
 
     val (ownPrs, rest) = report.pulls.partition(_.user.login == person)
 
-    val (teamPrs, externalPrs) = report.pulls.partition { pr => settings.teamMembers(pr.user.login) }
+    val (teamPrs, externalPrs) = rest.partition { pr => settings.teamMembers(pr.user.login) }
 
     val ownActions = ownPrs.map { pr =>
       val action =

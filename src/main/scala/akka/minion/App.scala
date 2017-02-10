@@ -11,6 +11,7 @@ import scala.io.StdIn
 import scala.util.control.NonFatal
 import scala.concurrent.duration._
 import scala.collection.immutable.Seq
+import scala.concurrent.Await
 
 object App {
 
@@ -52,10 +53,14 @@ object App {
       )
 
       system.actorOf(App.props(settings), "minion-supervisor")
+
+      Await.result(system.whenTerminated, Duration.Inf)
     } catch {
       case e: Throwable =>
         println("Minion lost.")
         e.printStackTrace()
+    } finally {
+      system.terminate()
     }
   }
 

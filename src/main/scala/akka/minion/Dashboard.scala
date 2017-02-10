@@ -1,8 +1,10 @@
 package akka.minion
 
+import java.time.{Duration, ZonedDateTime}
+
 import akka.actor.{Actor, ActorLogging, Props}
 import akka.minion.App.Settings
-import akka.minion.GithubService.{CommitStatusConstants, FullReport, PullRequest}
+import akka.minion.GithubService.{CommitStatusConstants, FullReport, IssueComment, PullRequest, PullRequestReview}
 
 import scala.collection.immutable.Seq
 
@@ -11,24 +13,51 @@ object Dashboard {
   def props(settings: Settings): Props = Props(new Dashboard(settings))
 
   // Main dashboard
+  trait Action
+  object Action {
+    case object Commented extends Action
+    case object Approved extends Action
+    case object RequestedChanges extends Action
+    case object OpenedPr extends Action
+
+    def toAction(review: PullRequestReview): Action = review match {
+      case r if r.commented => Action.Commented
+      case r if r.approved => Action.Approved
+      case r if r.changesRequested => Action.RequestedChanges
+    }
+  }
+
+  trait PrValidationStatus
+  object PrValidationStatus {
+    case object Success extends PrValidationStatus
+    case object Pending extends PrValidationStatus
+    case object Failure extends PrValidationStatus
+  }
+
+  case class Person(login: String, avatarUrl: String)
+  case class Performance(person: Person, action: Action, performedAt: ZonedDateTime)
+
+  case class ApiUsageStats(limit: Int, remaining: Int, resetsIn: String)
+
   case object GetMainDashboard
   case class MainDashboardReply(report: Option[MainDashboardData])
 
   case class MainDashboardData(
     repo: String,
-    pulls: Seq[MainDashboardEntry]
+    pulls: Seq[MainDashboardEntry],
+    usageStats: ApiUsageStats
   )
 
 
   case class MainDashboardEntry(
-    author: String,
+    author: Person,
     number: Int,
     title: String,
     lastUpdated: String,
-    people: Set[String],
-    lastActor: String,
+    people: Set[Performance],
+    lastActor: Performance,
     mergeable: Option[Boolean],
-    statusOk: Option[Boolean],
+    status: PrValidationStatus,
     reviewedOk: Int,
     reviewedReject: Int
   )
@@ -52,6 +81,20 @@ object Dashboard {
   case object PleaseRebase extends PrAction
   case object PleaseResolve extends PrAction
   case object PleaseFix extends PrAction
+
+  implicit class ZonedDateTimeOps(datetime: ZonedDateTime) {
+    def prettyAgo: String = Duration.between(datetime, ZonedDateTime.now) match {
+      case d if d.toMinutes < 60 => s"${d.toMinutes} minutes ago"
+      case d if d.toHours < 24 => s"${d.toHours} hours ago"
+      case d if d.toDays < 31 => s"${d.toDays} days ago"
+      case d => s"months ago"
+    }
+
+    def prettyIn: String = Duration.between(ZonedDateTime.now, datetime) match {
+      case d if d.toMinutes < 60 => s"in ${d.toMinutes} minutes"
+      case d => s"in more than an hour"
+    }
+  }
 }
 
 class Dashboard(settings: Settings) extends Actor with ActorLogging {
@@ -93,29 +136,59 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
     val entries = report.pulls.map { pull =>
       val comments = report.comments(pull)
       val status = report.statuses(pull)
+      val reviews = report.reviews(pull)
+
+      val commenters = comments.collect {
+        case IssueComment(_, Some(user), Some(created), _, _) if !settings.bots(user.login) =>
+          Performance(Person(user.login, user.avatar_url), Action.Commented, created)
+      }
+
+      val reviewers = reviews.collect {
+        case review@PullRequestReview(user, _, Some(created), _) if !settings.bots(user.login) =>
+          Performance(Person(user.login, user.avatar_url), Action.toAction(review), created)
+      }
+
+      val involvedPeople = (commenters ++ reviewers).toSeq.groupBy(_.person).map {
+        case (person, performances) =>
+          // pr approval/rejection is more important than comments
+          performances
+            .find(p => Seq(Action.Approved, Action.RequestedChanges).contains(p.action))
+            .getOrElse(performances.head)
+        }.toSet
+
+      def lastPerformance = {
+        val creation = Performance(Person(pull.user.login, pull.user.avatar_url), Action.OpenedPr, pull.created_at.get)
+        val lastComment = commenters.lastOption
+        val lastReview = reviewers.lastOption
+
+        (Seq(creation) ++ lastComment ++ lastReview).sortBy(_.performedAt.toInstant).last
+      }
 
       MainDashboardEntry(
-        author = pull.user.login,
+        author = Person(pull.user.login, pull.user.avatar_url),
         number = pull.number,
         title = pull.title,
-        lastUpdated = comments.last.updated_at.get.fold(_.toString, _.toString),
-        people = comments.iterator.map(_.user).collect {
-          case Some(user) if !settings.bots(user.login) => user.login
-        }.toSet,
-        lastActor = comments.map(_.user).collect {
-          case Some(user) if !settings.bots(user.login) => user.login
-        }.lastOption.getOrElse(""),
+        lastUpdated = pull.updated_at.fold("long time ago...")(_.prettyAgo),
+        people = involvedPeople,
+        lastActor = lastPerformance,
         mergeable = pull.mergeable,
-        statusOk =
-          if (status.statuses.isEmpty) None
-          else Some(!status.statuses.exists(_.state == CommitStatusConstants.FAILURE)),
-        reviewedOk = status.statuses.count(_.state == CommitStatusConstants.REVIEWED),
-        reviewedReject = 0
+        status =
+          if (status.statuses.exists(_.state == CommitStatusConstants.PENDING)) PrValidationStatus.Pending
+          else if (status.statuses.exists(_.state == CommitStatusConstants.FAILURE)) PrValidationStatus.Failure
+          else PrValidationStatus.Success,
+        reviewedOk = reviews.count(_.approved),
+        reviewedReject = reviews.count(_.changesRequested)
       )
 
     }
 
-    MainDashboardData(report.repo.full_name, entries)
+    MainDashboardData(
+      report.repo.full_name,
+      entries,
+      ApiUsageStats(
+        report.usageStats.rate.limit,
+        report.usageStats.rate.remaining,
+        report.usageStats.rate.reset.prettyIn))
   }
 
   private def createPersonalDashboard(person: String, report: FullReport): PersonalDashboard = {

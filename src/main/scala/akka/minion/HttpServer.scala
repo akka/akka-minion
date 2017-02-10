@@ -1,19 +1,18 @@
 package akka.minion
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.stream.ActorMaterializer
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.minion.Dashboard._
-import akka.minion.GithubService.PullRequest
+import akka.pattern.{AskTimeoutException, ask}
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import akka.pattern.ask
-import akka.pattern.AskTimeoutException
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scalatags.Text.TypedTag
+import scalatags.stylesheet.{CascadingStyleSheet, Cls}
 
 object HttpServer {
 
@@ -110,6 +109,18 @@ object Template {
         ),
         script(
           src := "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
+        ),
+        link(
+          rel := "stylesheet",
+          href := "https://cdnjs.cloudflare.com/ajax/libs/octicons/4.4.0/font/octicons.min.css"
+        ),
+        tag("style")(
+          Style.styleSheetText,
+          raw("""
+            |.table > tbody > tr > td {
+            |     vertical-align: middle;
+            |}
+          """.stripMargin)
         )
       ),
       body(
@@ -140,16 +151,22 @@ object Template {
             tbody(
               for (pull <- report.pulls) yield {
                 tr(
-                  td(a(href:=repoUrl + "/pull/" + pull.number, s"${pull.number}: ${pull.title}")),
-                  td(pull.lastUpdated),
-                  td(pull.people.mkString(", ")),
-                  td(pull.lastActor),
+                  td(
+                    person(pull.author),
+                    a(href:=repoUrl + "/pull/" + pull.number, s"${pull.number}: ${pull.title}")
+                  ),
+                  td(Style.noWrap, pull.lastUpdated),
+                  td(pull.people.map(involvment).toSeq),
+                  td(Style.noWrap, performance(pull.lastActor)),
                   td(threeState(pull.mergeable)),
-                  td(threeState(pull.statusOk)),
-                  td(pull.reviewedOk)
+                  td(validationStatus(pull.status)),
+                  td(reviewStatus(pull))
                 )
               }
             )
+          ),
+          p(
+            s"API call quota: ${report.usageStats.remaining}/${report.usageStats.limit}. Will reset ${report.usageStats.resetsIn}"
           )
         )
     }
@@ -224,5 +241,103 @@ object Template {
       p("Github poller", ghStatus)
     )
   }
+
+  def involvment(p: Performance): TypedTag[String] = {
+    person(p.person, (p.action match {
+      case Action.Approved => Seq(Style.good)
+      case Action.RequestedChanges => Seq(Style.bad)
+      case _ => Seq()
+    }):_*)
+  }
+
+  def person(p: Person, styles: Cls*): TypedTag[String] = {
+    img(
+      Style.avatar,
+      styles,
+      src := p.avatarUrl,
+      title := p.login
+    )
+  }
+
+  def performance(perf: Performance): Seq[TypedTag[String]] = {
+    val (icon, titleText) = perf.action match {
+      case Action.Commented => ("comment", "Commented")
+      case Action.Approved => ("check", "Approved PR")
+      case Action.RequestedChanges => ("x", "Requested changes")
+      case Action.OpenedPr => ("git-pull-request", "Opened PR")
+    }
+
+    Seq(
+      person(perf.person),
+      span(`class` := s"octicon octicon-$icon", title:=titleText)
+    )
+  }
+
+  def reviewStatus(pull: MainDashboardEntry): TypedTag[String] = {
+    val (icon, titleText, style) = pull match {
+      case p if p.reviewedReject > 0 => ("x", "Changes requested", Style.badIcon)
+      case p if p.reviewedOk >= 2 => ("check", "Pull Request approved", Style.goodIcon)
+      case _ => ("", "", Style.empty)
+    }
+    span(
+      `class`:=s"octicon octicon-$icon",
+      style,
+      title:=titleText
+    )
+  }
+
+  def validationStatus(status: PrValidationStatus): TypedTag[String] = {
+    val (icon, titleText, style) = status match {
+      case PrValidationStatus.Success => ("check", "All PR validations passed", Style.goodIcon)
+      case PrValidationStatus.Pending => ("clock", "PR validation in progress", Style.indifferentIcon)
+      case PrValidationStatus.Failure => ("x", "PR validation failed", Style.badIcon)
+    }
+    span(
+      `class`:=s"octicon octicon-$icon",
+      style,
+      title:=titleText
+    )
+  }
+}
+
+object Style extends CascadingStyleSheet {
+  import scalatags.Text.all._
+
+  initStyleSheet()
+
+  val avatar = cls(
+    width:="24px",
+    height:="24px",
+    borderRadius:="4px",
+    marginRight:="8px"
+  )
+
+  val good = cls(
+    border:="2px solid green",
+    padding:="1px"
+  )
+
+  val bad = cls(
+    border:="2px solid red",
+    padding:="1px"
+  )
+
+  val goodIcon = cls(
+    color:="green"
+  )
+
+  val indifferentIcon = cls(
+    color:="orange"
+  )
+
+  val badIcon = cls(
+    color:="red"
+  )
+
+  val noWrap = cls(
+    whiteSpace:="nowrap"
+  )
+
+  val empty = cls()
 
 }

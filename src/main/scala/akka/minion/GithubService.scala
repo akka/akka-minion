@@ -1,34 +1,57 @@
 package akka.minion
 
-import java.util.concurrent.TimeUnit
+import java.time.{Instant, ZoneOffset, ZonedDateTime}
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model._
-import akka.stream.{ActorMaterializer, OverflowStrategy, ThrottleMode}
-import akka.stream.scaladsl._
-import spray.json._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.unmarshalling.Unmarshal
-import HttpMethods._
 import akka.Done
 import akka.actor.Status.Failure
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.HttpMethods._
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.GenericHttpCredentials
+import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.minion.App.Settings
+import akka.stream.scaladsl._
+import akka.stream.{ActorMaterializer, OverflowStrategy, ThrottleMode}
+import spray.json._
 
-import scala.concurrent.{Future, Promise}
-import scala.concurrent.duration._
 import scala.collection.immutable.Seq
+import scala.concurrent.duration._
+import scala.concurrent.{Future, Promise}
 
+trait ZuluDateTimeMarshalling {
+  import scala.util.Try
 
-object GithubService extends DefaultJsonProtocol {
+  implicit object DateFormat extends JsonFormat[ZonedDateTime] {
+    def write(date: ZonedDateTime) = JsString(dateToIsoString(date))
+    def read(json: JsValue) = json match {
+      case JsString(rawDate) =>
+        parseIsoDateString(rawDate)
+          .fold(deserializationError(s"Expected ISO Date format, got $rawDate"))(identity)
+      case JsNumber(rawNumber) =>
+        parseEpochSeconds(rawNumber)
+          .fold(deserializationError(s"Expected Epoch Seconds, got $rawNumber"))(identity)
+      case error => deserializationError(s"Expected JsString, got $error")
+    }
+  }
+
+  private def dateToIsoString(date: ZonedDateTime) =
+    date.toString
+
+  private def parseIsoDateString(date: String): Option[ZonedDateTime] =
+    Try { Instant.parse(date).atZone(ZoneOffset.UTC) }.toOption
+
+  private def parseEpochSeconds(date: BigDecimal): Option[ZonedDateTime] =
+    Try { Instant.ofEpochSecond(date.toLong).atZone(ZoneOffset.UTC) }.toOption
+}
+
+object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
 
   case object Refresh
   case class ClientFailed(ex: Throwable)
 
   def props(settings: Settings, listeners: Seq[ActorRef]): Props = Props(new GithubService(settings, listeners))
-
-  type Date = Option[Either[String, Long]]
 
   object CommitStatusConstants {
     final val SUCCESS = "success"
@@ -45,21 +68,20 @@ object GithubService extends DefaultJsonProtocol {
       case _ => true
     }
   }
-  import CommitStatusConstants._
 
-  case class User(login: String)
+  case class User(login: String, avatar_url: String)
   case class Author(name: String, email: String) {// , username: Option[String]
     override def toString = name
   }
   case class Repository(name: String, full_name: String, git_url: String,
-                        updated_at: Date, created_at: Date, pushed_at: Date) { // owner: Either[User, Author]
+                        updated_at: Option[ZonedDateTime], created_at: Option[ZonedDateTime], pushed_at: Option[ZonedDateTime]) { // owner: Either[User, Author]
     override def toString = full_name
   }
   case class GitRef(sha: String, label: String, ref: String, repo: Repository, user: User) {
     override def toString = s"${repo}#${sha.take(7)}"
   }
   case class PullRequest(number: Int, state: String, title: String, body: Option[String],
-                         created_at: Date, updated_at: Date, closed_at: Date, merged_at: Date,
+                         created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], closed_at: Option[ZonedDateTime], merged_at: Option[ZonedDateTime],
                          head: GitRef, base: GitRef, user: User, merged: Option[Boolean], mergeable: Option[Boolean], merged_by: Option[User]) {
     override def toString = s"${base.repo}#$number"
   }
@@ -72,7 +94,7 @@ object GithubService extends DefaultJsonProtocol {
     private val MergeBranch = """Merge to (\S+)\b""".r.unanchored
   }
   case class Milestone(number: Int, state: String, title: String, description: Option[String], creator: User,
-                       created_at: Date, updated_at: Date, closed_at: Option[Date], due_on: Option[Date]) {
+                       created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], closed_at: Option[ZonedDateTime], due_on: Option[ZonedDateTime]) {
     override def toString = s"Milestone $title ($state)"
 
     def mergeBranch = description match {
@@ -82,30 +104,21 @@ object GithubService extends DefaultJsonProtocol {
   }
 
   case class Issue(number: Int, state: String, title: String, body: Option[String], user: User, labels: List[Label],
-                   assignee: Option[User], milestone: Option[Milestone], created_at: Date, updated_at: Date, closed_at: Date) {
+                   assignee: Option[User], milestone: Option[Milestone], created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], closed_at: Option[ZonedDateTime]) {
     override def toString = s"Issue #$number"
   }
 
-  case class CommitInfo(id: Option[String], message: String, timestamp: Date, author: Author, committer: Author)
+  case class CommitInfo(id: Option[String], message: String, timestamp: Option[ZonedDateTime], author: Author, committer: Author)
   // added: Option[List[String]], removed: Option[List[String]], modified: Option[List[String]]
   case class Commit(sha: String, commit: CommitInfo, url: Option[String] = None)
-
-  trait HasState {
-    def state: String
-
-    def success  = state == SUCCESS
-    def pending  = state == PENDING
-    def failure  = state == FAILURE
-  }
 
   case class CombiCommitStatus(state: String, sha: String, statuses: List[CommitStatus], total_count: Int)
 
   case class CommitStatus(state: String, context: Option[String] = None, description: Option[String] = None, target_url: Option[String] = None)
 
-  case class IssueComment(body: String, user: Option[User] = None, created_at: Date = None, updated_at: Date = None, id: Option[Long] = None)
+  case class IssueComment(body: String, user: Option[User] = None, created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], id: Option[Long] = None)
 
-  case class PullRequestComment(body: String, user: Option[User] = None, commit_id: Option[String] = None, path: Option[String] = None, position: Option[Int] = None,
-                                created_at: Date = None, updated_at: Date = None, id: Option[Long] = None)
+  case class PullRequestComment(body: String, user: Option[User] = None, commit_id: Option[String] = None, path: Option[String] = None, position: Option[Int] = None, created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], id: Option[Long] = None)
 
   case class PullRequestEvent(action: String, number: Int, pull_request: PullRequest)
   case class PushEvent(ref: String, commits: List[CommitInfo], repository: Repository)
@@ -119,7 +132,7 @@ object GithubService extends DefaultJsonProtocol {
     final val APPROVED = "APPROVED"
   }
 
-  case class PullRequestReview(user: User, body: String, submitted_at: Date, state: String) {
+  case class PullRequestReview(user: User, body: String, submitted_at: Option[ZonedDateTime], state: String) {
     import ReviewStatusConstants._
 
     def commented = state == COMMENTED
@@ -127,8 +140,11 @@ object GithubService extends DefaultJsonProtocol {
     def approved = state == APPROVED
   }
 
+  case class RateLimit(limit: Int, remaining: Int, reset: ZonedDateTime)
+  case class UsageStats(rate: RateLimit)
+
   private type RJF[x] = RootJsonFormat[x]
-  implicit lazy val _fmtUser             : RJF[User]                          = jsonFormat1(User)
+  implicit lazy val _fmtUser             : RJF[User]                          = jsonFormat2(User)
   implicit lazy val _fmtAuthor           : RJF[Author]                        = jsonFormat2(Author)
   implicit lazy val _fmtRepository       : RJF[Repository]                    = jsonFormat6(Repository)
 
@@ -155,12 +171,16 @@ object GithubService extends DefaultJsonProtocol {
 
   implicit lazy val _fmtPullRequestReview: RJF[PullRequestReview]             = jsonFormat4(PullRequestReview)
 
+  implicit lazy val _fmtRateLimit        : RJF[RateLimit]                     = jsonFormat3(RateLimit)
+  implicit lazy val _fmtUsageStats       : RJF[UsageStats]                    = jsonFormat1(UsageStats)
+
   case class FullReport(
     repo: Repository,
     pulls: Seq[PullRequest],
     comments: Map[PullRequest, Seq[IssueComment]],
     statuses: Map[PullRequest, CombiCommitStatus],
-    reviews: Map[PullRequest, Seq[PullRequestReview]]
+    reviews: Map[PullRequest, Seq[PullRequestReview]],
+    usageStats: UsageStats
   )
 
 }
@@ -202,8 +222,8 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
     }
   }
 
-  private def api[T: RootJsonFormat](repo: String, apiPath: String = ""): Future[T] = {
-    val req = HttpRequest(GET, uri = s"/repos/$repo$apiPath")
+  private def api[T: RootJsonFormat](repo: String, apiPath: String = "", base: String = "/repos/"): Future[T] = {
+    val req = HttpRequest(GET, uri = s"$base$repo$apiPath")
     throttledJson[T](req)
   }
 
@@ -231,6 +251,7 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
   private def createReport(repo: String): Future[FullReport] = {
     val repoFuture = api[Repository](repo)
     val pullsFuture = api[Seq[PullRequest]](repo, "/pulls")
+    val usageStatsFuture = api[UsageStats](repo = "", base = "/rate_limit")
 
     val pullCommentsFuture = pullsFuture.flatMap { pulls =>
 
@@ -261,8 +282,9 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
       pullComments <- pullCommentsFuture
       pullStatus <- pullStatusFuture
       pullReviews <- pullReviewsFuture
+      usageStats <- usageStatsFuture
     } yield FullReport(
-      repo, pulls, pullComments, pullStatus, pullReviews
+      repo, pulls, pullComments, pullStatus, pullReviews, usageStats
     )
 
   }

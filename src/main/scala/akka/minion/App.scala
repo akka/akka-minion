@@ -52,17 +52,11 @@ object App {
       )
 
       system.actorOf(App.props(settings), "minion-supervisor")
-
-      println("Press Enter to stop")
-      StdIn.readLine()
     } catch {
       case e: Throwable =>
         println("Minion lost.")
         e.printStackTrace()
-    } finally {
-      system.terminate()
     }
-
   }
 
 }

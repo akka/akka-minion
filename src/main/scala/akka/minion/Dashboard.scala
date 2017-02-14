@@ -13,21 +13,23 @@ object Dashboard {
   def props(settings: Settings): Props = Props(new Dashboard(settings))
 
   // Main dashboard
-  trait Action
+  sealed trait Action
   object Action {
     case object Commented extends Action
     case object Approved extends Action
     case object RequestedChanges extends Action
     case object OpenedPr extends Action
+    case object Dismissed extends Action
 
     def toAction(review: PullRequestReview): Action = review match {
       case r if r.commented => Action.Commented
       case r if r.approved => Action.Approved
       case r if r.changesRequested => Action.RequestedChanges
+      case r if r.dismissed => Action.Dismissed
     }
   }
 
-  trait PrValidationStatus
+  sealed trait PrValidationStatus
   object PrValidationStatus {
     case object Success extends PrValidationStatus
     case object Pending extends PrValidationStatus

@@ -265,6 +265,7 @@ object Template {
       case Action.Approved => ("check", "Approved PR")
       case Action.RequestedChanges => ("x", "Requested changes")
       case Action.OpenedPr => ("git-pull-request", "Opened PR")
+      case Action.Dismissed => ("mute", "Dismissed review")
     }
 
     Seq(

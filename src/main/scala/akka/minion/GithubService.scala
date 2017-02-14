@@ -130,6 +130,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     final val COMMENTED = "COMMENTED"
     final val CHANGES_REQUESTED = "CHANGES_REQUESTED"
     final val APPROVED = "APPROVED"
+    final val DISMISSED = "DISMISSED"
   }
 
   case class PullRequestReview(user: User, body: String, submitted_at: Option[ZonedDateTime], state: String) {
@@ -138,6 +139,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     def commented = state == COMMENTED
     def changesRequested = state == CHANGES_REQUESTED
     def approved = state == APPROVED
+    def dismissed = state == DISMISSED
   }
 
   case class RateLimit(limit: Int, remaining: Int, reset: ZonedDateTime)

@@ -120,7 +120,7 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
       sender() ! App.ServicePong
 
     case report: FullReport =>
-      log.info(s"Received fresh report for ${report.repo}")
+      log.info(s"Received fresh report for ${report.repo}. Remaining API quota: ${report.usageStats.rate.remaining}")
       lastFullReport = Some(report)
       lastMainReport = Some(createMainDashboard(report))
       personalReports = Map.empty
@@ -150,8 +150,8 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
           Performance(Person(user.login, user.avatar_url), Action.toAction(review), created)
       }
 
-      val involvedPeople = (commenters ++ reviewers).toSeq.groupBy(_.person).map {
-        case (person, performances) =>
+      val involvedPeople = (commenters ++ reviewers).toSeq.groupBy(_.person.login).map {
+        case (_, performances) =>
           // pr approval/rejection is more important than comments
           performances
             .find(p => Seq(Action.Approved, Action.RequestedChanges).contains(p.action))

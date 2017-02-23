@@ -9,16 +9,19 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.GenericHttpCredentials
+import akka.http.scaladsl.model.headers.{`If-None-Match`, ETag, EntityTag, GenericHttpCredentials}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.minion.App.Settings
 import akka.stream.scaladsl._
 import akka.stream.{ActorMaterializer, OverflowStrategy, ThrottleMode}
+import com.github.blemale.scaffeine.Scaffeine
 import spray.json._
 
+import scala.None
 import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
+import scala.util.Try
 
 trait ZuluDateTimeMarshalling {
   import scala.util.Try
@@ -195,11 +198,16 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
 
   private val timer = context.system.scheduler.schedule(1.second, settings.pollInterval, self, Refresh)
 
+  private val responseCache = Scaffeine()
+    .maximumSize(500)
+    .build[Uri, (EntityTag, Any)]()
+
   // Throttled global connection pool
   val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
     Source.queue[(HttpRequest, Promise[HttpResponse])](256, OverflowStrategy.backpressure)
       .throttle(settings.apiCallPerHour, 1.hour, 100, ThrottleMode.shaping)
       .via(Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
+      //.via(responseCache)
       .toMat(Sink.foreach { case (response, promise) =>
         promise.tryComplete(response)
       })(Keep.both).run()
@@ -219,8 +227,21 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
   }
 
   private def throttledJson[T: RootJsonFormat](req: HttpRequest): Future[T] = {
-    throttledRequest(req).flatMap { resp =>
-      Unmarshal(resp.entity).to[T]
+    val etag = responseCache.getIfPresent(req.uri)
+    throttledRequest(etag.fold(req){ case (tag, _) => req.addHeader(`If-None-Match`(tag))}).flatMap {
+      case response @ HttpResponse(StatusCodes.NotModified, _, _, _) =>
+        response.discardEntityBytes()
+        etag match {
+          case Some((_, res)) => Future.successful(res.asInstanceOf[T])
+          case None => throw new Error("No changes from the cached version, but cache is empty.")
+        }
+      case response @ HttpResponse(StatusCodes.OK, _, entity, _) =>
+        val resp = Unmarshal(entity).to[T]
+        resp.onSuccess {
+          case r => response.header[ETag].fold()(e => responseCache.put(req.uri, (e.etag, r)))
+        }
+        resp
+      case response => Unmarshal(response.entity).to[T]
     }
   }
 
@@ -298,6 +319,4 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
     createReport("akka/akka").pipeTo(self)
 
   }
-
-
 }

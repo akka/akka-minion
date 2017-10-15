@@ -207,7 +207,6 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
     Source.queue[(HttpRequest, Promise[HttpResponse])](256, OverflowStrategy.backpressure)
       .throttle(settings.apiCallPerHour, 1.hour, 100, ThrottleMode.shaping)
       .via(Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
-      //.via(responseCache)
       .toMat(Sink.foreach { case (response, promise) =>
         promise.tryComplete(response)
       })(Keep.both).run()

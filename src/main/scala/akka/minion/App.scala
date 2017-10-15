@@ -4,13 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.ConfigurationException
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{
-  Actor,
-  ActorSystem,
-  OneForOneStrategy,
-  Props,
-  SupervisorStrategy
-}
+import akka.actor.{Actor, ActorSystem, OneForOneStrategy, Props, SupervisorStrategy}
 import com.typesafe.config.ConfigList
 
 import scala.io.StdIn
@@ -55,13 +49,13 @@ object App {
 
       val settings = Settings(
         httpPort = config.getInt("akka.minion.http-port"),
-        pollInterval = Duration(config.getDuration("akka.minion.poll-interval",
-                                                   TimeUnit.MILLISECONDS),
-                                TimeUnit.MILLISECONDS),
+        pollInterval =
+          Duration(config.getDuration("akka.minion.poll-interval", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS),
         token = config.getString("akka.minion.api-key"),
         apiCallPerHour = config.getInt("akka.minion.max-api-calls-per-hour"),
         teamMembers = asList(config.getList("akka.minion.team-members")).toSet,
-        bots = asList(config.getList("akka.minion.bots")).toSet
+        bots = asList(config.getList("akka.minion.bots")).toSet,
+        repos = asList(config.getList("akka.minion.repos")).toSet
       )
 
       system.actorOf(App.props(settings), "minion-supervisor")
@@ -93,11 +87,7 @@ class App(settings: App.Settings) extends Actor {
     val dashboard =
       context.watch(context.actorOf(Dashboard.props(settings), "dashboard"))
     val ghService =
-      context.watch(
-        context.actorOf(GithubService.props(settings, List(bot, dashboard)),
-                        "github-service"))
-    context.watch(
-      context.actorOf(HttpServer.props(settings, ghService, bot, dashboard),
-                      "http-server"))
+      context.watch(context.actorOf(GithubService.props(settings, List(bot, dashboard)), "github-service"))
+    context.watch(context.actorOf(HttpServer.props(settings, ghService, bot, dashboard), "http-server"))
   }
 }

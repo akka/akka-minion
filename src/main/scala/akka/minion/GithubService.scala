@@ -9,12 +9,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{
-  `If-None-Match`,
-  ETag,
-  EntityTag,
-  GenericHttpCredentials
-}
+import akka.http.scaladsl.model.headers.{`If-None-Match`, ETag, EntityTag, GenericHttpCredentials}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.minion.App.Settings
 import akka.stream.scaladsl._
@@ -36,14 +31,10 @@ trait ZuluDateTimeMarshalling {
     def read(json: JsValue) = json match {
       case JsString(rawDate) =>
         parseIsoDateString(rawDate)
-          .fold(
-            deserializationError(s"Expected ISO Date format, got $rawDate"))(
-            identity)
+          .fold(deserializationError(s"Expected ISO Date format, got $rawDate"))(identity)
       case JsNumber(rawNumber) =>
         parseEpochSeconds(rawNumber)
-          .fold(
-            deserializationError(s"Expected Epoch Seconds, got $rawNumber"))(
-            identity)
+          .fold(deserializationError(s"Expected Epoch Seconds, got $rawNumber"))(identity)
       case error => deserializationError(s"Expected JsString, got $error")
     }
   }
@@ -86,20 +77,15 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   case class Author(name: String, email: String) { // , username: Option[String]
     override def toString = name
   }
-  case class Repository(
-      name: String,
-      full_name: String,
-      git_url: String,
-      updated_at: Option[ZonedDateTime],
-      created_at: Option[ZonedDateTime],
-      pushed_at: Option[ZonedDateTime]) { // owner: Either[User, Author]
+  case class Repository(name: String,
+                        full_name: String,
+                        git_url: String,
+                        updated_at: Option[ZonedDateTime],
+                        created_at: Option[ZonedDateTime],
+                        pushed_at: Option[ZonedDateTime]) { // owner: Either[User, Author]
     override def toString = full_name
   }
-  case class GitRef(sha: String,
-                    label: String,
-                    ref: String,
-                    repo: Repository,
-                    user: User) {
+  case class GitRef(sha: String, label: String, ref: String, repo: Repository, user: User) {
     override def toString = s"${repo}#${sha.take(7)}"
   }
   case class PullRequest(number: Int,
@@ -119,9 +105,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     override def toString = s"${base.repo}#$number"
   }
 
-  case class Label(name: String,
-                   color: Option[String] = None,
-                   url: Option[String] = None) {
+  case class Label(name: String, color: Option[String] = None, url: Option[String] = None) {
     override def toString = name
   }
 
@@ -165,14 +149,9 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
                         author: Author,
                         committer: Author)
   // added: Option[List[String]], removed: Option[List[String]], modified: Option[List[String]]
-  case class Commit(sha: String,
-                    commit: CommitInfo,
-                    url: Option[String] = None)
+  case class Commit(sha: String, commit: CommitInfo, url: Option[String] = None)
 
-  case class CombiCommitStatus(state: String,
-                               sha: String,
-                               statuses: List[CommitStatus],
-                               total_count: Int)
+  case class CombiCommitStatus(state: String, sha: String, statuses: List[CommitStatus], total_count: Int)
 
   case class CommitStatus(state: String,
                           context: Option[String] = None,
@@ -194,21 +173,14 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
                                 updated_at: Option[ZonedDateTime],
                                 id: Option[Long] = None)
 
-  case class PullRequestEvent(action: String,
-                              number: Int,
-                              pull_request: PullRequest)
-  case class PushEvent(ref: String,
-                       commits: List[CommitInfo],
-                       repository: Repository)
+  case class PullRequestEvent(action: String, number: Int, pull_request: PullRequest)
+  case class PushEvent(ref: String, commits: List[CommitInfo], repository: Repository)
 
   case class PullRequestReviewCommentEvent(action: String,
                                            pull_request: PullRequest,
                                            comment: PullRequestComment,
                                            repository: Repository)
-  case class IssueCommentEvent(action: String,
-                               issue: Issue,
-                               comment: IssueComment,
-                               repository: Repository)
+  case class IssueCommentEvent(action: String, issue: Issue, comment: IssueComment, repository: Repository)
 
   object ReviewStatusConstants {
     final val COMMENTED = "COMMENTED"
@@ -217,10 +189,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     final val DISMISSED = "DISMISSED"
   }
 
-  case class PullRequestReview(user: User,
-                               body: String,
-                               submitted_at: Option[ZonedDateTime],
-                               state: String) {
+  case class PullRequestReview(user: User, body: String, submitted_at: Option[ZonedDateTime], state: String) {
     import ReviewStatusConstants._
 
     def commented = state == COMMENTED
@@ -239,18 +208,15 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
 
   implicit lazy val _fmtGitRef: RJF[GitRef] = jsonFormat5(GitRef)
 
-  implicit lazy val _fmtPullRequest: RJF[PullRequest] = jsonFormat14(
-    PullRequest)
+  implicit lazy val _fmtPullRequest: RJF[PullRequest] = jsonFormat14(PullRequest)
 
   implicit lazy val _fmtLabel: RJF[Label] = jsonFormat3(Label)
-  implicit lazy val _fmtMilestone: RJF[Milestone] = jsonFormat9(
-    Milestone.apply)
+  implicit lazy val _fmtMilestone: RJF[Milestone] = jsonFormat9(Milestone.apply)
   implicit lazy val _fmtIssue: RJF[Issue] = jsonFormat11(Issue)
 
   implicit lazy val _fmtCommitInfo: RJF[CommitInfo] = jsonFormat5(CommitInfo)
   implicit lazy val _fmtCommit: RJF[Commit] = jsonFormat3(Commit)
-  implicit lazy val _fmtCommitStatus: RJF[CommitStatus] = jsonFormat4(
-    CommitStatus.apply)
+  implicit lazy val _fmtCommitStatus: RJF[CommitStatus] = jsonFormat4(CommitStatus.apply)
   implicit lazy val _fmtCombiCommitStatus: RJF[CombiCommitStatus] = jsonFormat(
     CombiCommitStatus,
     "state",
@@ -259,13 +225,11 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     "total_count"
   ) // need to specify field names because we added methods to the case class..
 
-  implicit lazy val _fmtIssueComment: RJF[IssueComment] = jsonFormat5(
-    IssueComment)
+  implicit lazy val _fmtIssueComment: RJF[IssueComment] = jsonFormat5(IssueComment)
   implicit lazy val _fmtPullRequestComment: RJF[PullRequestComment] =
     jsonFormat8(PullRequestComment)
 
-  implicit lazy val _fmtPullRequestEvent: RJF[PullRequestEvent] = jsonFormat3(
-    PullRequestEvent)
+  implicit lazy val _fmtPullRequestEvent: RJF[PullRequestEvent] = jsonFormat3(PullRequestEvent)
   implicit lazy val _fmtPushEvent: RJF[PushEvent] = jsonFormat3(PushEvent)
   implicit lazy val _fmtPRCommentEvent: RJF[PullRequestReviewCommentEvent] =
     jsonFormat4(PullRequestReviewCommentEvent)
@@ -279,8 +243,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   implicit lazy val _fmtUsageStats: RJF[UsageStats] = jsonFormat1(UsageStats)
 
   case class FullReport(
-      repo: Repository,
-      pulls: Seq[PullRequest],
+      pulls: Map[Repository, Seq[PullRequest]],
       comments: Map[PullRequest, Seq[IssueComment]],
       statuses: Map[PullRequest, CombiCommitStatus],
       reviews: Map[PullRequest, Seq[PullRequestReview]],
@@ -289,33 +252,24 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
 
 }
 
-class GithubService(settings: Settings, listeners: Seq[ActorRef])
-    extends Actor
-    with ActorLogging {
+class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor with ActorLogging {
   import GithubService._
   import context.dispatcher
 
   private implicit val mat = ActorMaterializer()
 
-  private val timer = context.system.scheduler.schedule(1.second,
-                                                        settings.pollInterval,
-                                                        self,
-                                                        Refresh)
+  private val timer = context.system.scheduler.schedule(1.second, settings.pollInterval, self, Refresh)
 
   private val responseCache = Scaffeine()
     .maximumSize(500)
     .build[Uri, (EntityTag, Any)]()
 
   // Throttled global connection pool
-  val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])],
-       clientFuture: Future[Done]) =
+  val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
     Source
-      .queue[(HttpRequest, Promise[HttpResponse])](
-        256,
-        OverflowStrategy.backpressure)
-      .throttle(settings.apiCallPerHour, 1.hour, 100, ThrottleMode.shaping)
-      .via(
-        Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
+      .queue[(HttpRequest, Promise[HttpResponse])](512, OverflowStrategy.backpressure)
+      .throttle(settings.apiCallPerHour, 1.hour, 300, ThrottleMode.shaping)
+      .via(Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
       .toMat(Sink.foreach {
         case (response, promise) =>
           promise.tryComplete(response)
@@ -331,10 +285,8 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef])
     val promise = Promise[HttpResponse]
 
     val request = req
-      .addHeader(
-        headers.Authorization(GenericHttpCredentials("token", settings.token)))
-      .addHeader(headers.Accept(
-        MediaRange.custom("application/vnd.github.black-cat-preview+json")))
+      .addHeader(headers.Authorization(GenericHttpCredentials("token", settings.token)))
+      .addHeader(headers.Accept(MediaRange.custom("application/vnd.github.black-cat-preview+json")))
 
     queue.offer(request, promise).flatMap(_ => promise.future)
   }
@@ -349,8 +301,7 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef])
         etag match {
           case Some((_, res)) => Future.successful(res.asInstanceOf[T])
           case None =>
-            throw new Error(
-              "No changes from the cached version, but cache is empty.")
+            throw new Error("No changes from the cached version, but cache is empty.")
         }
       case response @ HttpResponse(StatusCodes.OK, _, entity, _) =>
         val resp = Unmarshal(entity).to[T]
@@ -365,9 +316,7 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef])
     }
   }
 
-  private def api[T: RootJsonFormat](repo: String,
-                                     apiPath: String = "",
-                                     base: String = "/repos/"): Future[T] = {
+  private def api[T: RootJsonFormat](repo: String, apiPath: String = "", base: String = "/repos/"): Future[T] = {
     val req = HttpRequest(GET, uri = s"$base$repo$apiPath")
     throttledJson[T](req)
   }
@@ -430,8 +379,7 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef])
       usageStats <- usageStatsFuture
     } yield
       FullReport(
-        repo,
-        pulls,
+        Map(repo -> pulls),
         pullComments,
         pullStatus,
         pullReviews,
@@ -444,7 +392,18 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef])
     log.info("Refreshing Github data")
     import akka.pattern.pipe
 
-    createReport("akka/akka").pipeTo(self)
-
+    Future
+      .sequence(settings.repos.map(createReport))
+      .map(_.reduce { (report1, report2) =>
+        FullReport(
+          report1.pulls ++ report2.pulls,
+          report1.comments ++ report2.comments,
+          report1.statuses ++ report2.statuses,
+          report1.reviews ++ report2.reviews,
+          if (report1.usageStats.rate.remaining < report2.usageStats.rate.remaining) report1.usageStats
+          else report2.usageStats
+        )
+      })
+      .pipeTo(self)
   }
 }

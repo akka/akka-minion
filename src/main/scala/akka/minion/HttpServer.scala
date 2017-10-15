@@ -16,10 +16,7 @@ import scalatags.stylesheet.{CascadingStyleSheet, Cls}
 
 object HttpServer {
 
-  def props(settings: App.Settings,
-            ghService: ActorRef,
-            bot: ActorRef,
-            dashboard: ActorRef): Props =
+  def props(settings: App.Settings, ghService: ActorRef, bot: ActorRef, dashboard: ActorRef): Props =
     Props(new HttpServer(settings, ghService, bot, dashboard))
 
 }
@@ -39,35 +36,35 @@ class HttpServer(
   implicit val timeout = Timeout(3.seconds)
 
   private val route =
-    pathSingleSlash {
-      get {
-        val ghStatus = serviceStatus(githubService)
-        val botStatus = serviceStatus(bot)
-        val dashboardStatus = serviceStatus(dashboard)
+  pathSingleSlash {
+    get {
+      val ghStatus = serviceStatus(githubService)
+      val botStatus = serviceStatus(bot)
+      val dashboardStatus = serviceStatus(dashboard)
 
-        complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
-      }
-    } ~
-      path("overview") {
-        get {
-          val reportFuture =
-            (dashboard ? GetMainDashboard)
-              .mapTo[MainDashboardReply]
-              .map(reply => Template(Template.mainDashboard(reply.report)))
+      complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
+    }
+  } ~
+  path("overview") {
+    get {
+      val reportFuture =
+        (dashboard ? GetMainDashboard)
+          .mapTo[MainDashboardReply]
+          .map(reply => Template(Template.mainDashboard(reply.report)))
 
-          complete(reportFuture)
-        }
-      } ~
-      path("personal" / Segment) { person =>
-        get {
-          val reportFuture =
-            (dashboard ? GetPersonalDashboard(person))
-              .mapTo[PersonalDashboardReply]
-              .map(reply => Template(Template.personalDashboard(reply.report)))
+      complete(reportFuture)
+    }
+  } ~
+  path("personal" / Segment) { person =>
+    get {
+      val reportFuture =
+        (dashboard ? GetPersonalDashboard(person))
+          .mapTo[PersonalDashboardReply]
+          .map(reply => Template(Template.personalDashboard(reply.report)))
 
-          complete(reportFuture)
-        }
-      }
+      complete(reportFuture)
+    }
+  }
 
   def serviceStatus(service: ActorRef): Future[String] =
     (service ? App.ServicePing)
@@ -78,8 +75,7 @@ class HttpServer(
       }
 
   override def preStart(): Unit = {
-    bindingFuture =
-      Http(context.system).bindAndHandle(route, "0.0.0.0", settings.httpPort)
+    bindingFuture = Http(context.system).bindAndHandle(route, "0.0.0.0", settings.httpPort)
     log.info(s"HTTP server started on port ${settings.httpPort}")
   }
 
@@ -137,10 +133,10 @@ object Template {
     data match {
       case None => alert(p("No dashboard data is available"), "info")
       case Some(report) =>
-        val repoUrl = s"https://github.com/${report.repo}"
+        def repoUrl(name: String) = s"https://github.com/$name"
 
         div(
-          h2(s"Report on ${report.repo}"),
+          h2(s"Report"),
           table(
             `class` := "table table-condensed",
             thead(
@@ -155,12 +151,12 @@ object Template {
               )
             ),
             tbody(
-              for (pull <- report.pulls) yield {
+              for (pull <- report.pulls.toSeq) yield {
                 tr(
                   td(
                     person(pull.author),
-                    a(href := repoUrl + "/pull/" + pull.number,
-                      s"${pull.number}: ${pull.title}")
+                    a(href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
+                      s"${pull.repo.name}#${pull.number}: ${pull.title}")
                   ),
                   td(Style.noWrap, pull.lastUpdated),
                   td(pull.people.map(involvment).toSeq),
@@ -182,7 +178,7 @@ object Template {
     data match {
       case None => alert(p("No dashboard data is available"), "info")
       case Some(report) =>
-        val repoUrl = s"https://github.com/${report.repo}"
+        def repoUrl(name: String) = s"https://github.com/$name"
 
         def renderAction(action: PrAction): TypedTag[String] = action match {
           case NoAction => p("N/A")
@@ -192,7 +188,7 @@ object Template {
           case PleaseRebase => p("Rebase")
         }
 
-        def mkTable(data: Seq[PersonalDashboardEntry]): TypedTag[String] =
+        def mkTable(data: Iterable[PersonalDashboardEntry]): TypedTag[String] =
           table(
             `class` := "table table-condensed",
             thead(
@@ -202,11 +198,12 @@ object Template {
               )
             ),
             tbody(
-              for (entry <- data if entry.action != NoAction) yield {
+              for (entry <- data.toSeq if entry.action != NoAction) yield {
                 tr(
                   td(
-                    a(href := repoUrl + "/pull/" + entry.pr.number,
-                      s"${entry.pr.number}: ${entry.pr.title}")),
+                    a(href := s"${repoUrl(entry.repo.fullName)}/pull/${entry.pr.number}",
+                      s"${entry.pr.number}: ${entry.pr.title}")
+                  ),
                   td(renderAction(entry.action))
                 )
               }

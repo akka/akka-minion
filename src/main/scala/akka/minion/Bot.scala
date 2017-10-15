@@ -21,6 +21,6 @@ class Bot(settingts: Settings) extends Actor with ActorLogging {
   override def receive: Receive = {
     case App.ServicePing => sender() ! App.ServicePong
     case report: FullReport =>
-      log.info(s"Received fresh report for ${report.repo}")
+      log.info(s"Received fresh report for ${report.pulls.keys.map(_.name)}")
   }
 }

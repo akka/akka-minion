@@ -4,7 +4,13 @@ import java.util.concurrent.TimeUnit
 
 import akka.ConfigurationException
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorSystem, OneForOneStrategy, Props, SupervisorStrategy}
+import akka.actor.{
+  Actor,
+  ActorSystem,
+  OneForOneStrategy,
+  Props,
+  SupervisorStrategy
+}
 import com.typesafe.config.ConfigList
 
 import scala.io.StdIn
@@ -19,12 +25,13 @@ object App {
   case object ServicePong
 
   case class Settings(
-    httpPort: Int,
-    pollInterval: FiniteDuration,
-    token: String,
-    apiCallPerHour: Int,
-    teamMembers: Set[String],
-    bots: Set[String]
+      httpPort: Int,
+      pollInterval: FiniteDuration,
+      token: String,
+      apiCallPerHour: Int,
+      teamMembers: Set[String],
+      bots: Set[String],
+      repos: Set[String]
   )
 
   def props(settings: Settings): Props = Props(new App(settings))
@@ -39,13 +46,18 @@ object App {
       def asList(cfg: ConfigList): Seq[String] = {
         val itr = cfg.iterator()
         var result = Vector.empty[String]
-        while (itr.hasNext) result :+= itr.next().unwrapped().asInstanceOf[String]
+        while (itr.hasNext) result :+= itr
+          .next()
+          .unwrapped()
+          .asInstanceOf[String]
         result
       }
 
       val settings = Settings(
         httpPort = config.getInt("akka.minion.http-port"),
-        pollInterval = Duration(config.getDuration("akka.minion.poll-interval", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS),
+        pollInterval = Duration(config.getDuration("akka.minion.poll-interval",
+                                                   TimeUnit.MILLISECONDS),
+                                TimeUnit.MILLISECONDS),
         token = config.getString("akka.minion.api-key"),
         apiCallPerHour = config.getInt("akka.minion.max-api-calls-per-hour"),
         teamMembers = asList(config.getList("akka.minion.team-members")).toSet,
@@ -68,18 +80,24 @@ object App {
 
 class App(settings: App.Settings) extends Actor {
 
-
-  override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, 3.seconds) {
-    case _: ConfigurationException => Stop
-    case NonFatal(_) => Restart
-  }
+  override def supervisorStrategy: SupervisorStrategy =
+    OneForOneStrategy(maxNrOfRetries = 10, 3.seconds) {
+      case _: ConfigurationException => Stop
+      case NonFatal(_) => Restart
+    }
 
   override def receive: Receive = Actor.emptyBehavior
 
   override def preStart(): Unit = {
     val bot = context.watch(context.actorOf(Bot.props(settings), "bot"))
-    val dashboard = context.watch(context.actorOf(Dashboard.props(settings), "dashboard"))
-    val ghService = context.watch(context.actorOf(GithubService.props(settings, List(bot, dashboard)), "github-service"))
-    context.watch(context.actorOf(HttpServer.props(settings, ghService, bot, dashboard), "http-server"))
+    val dashboard =
+      context.watch(context.actorOf(Dashboard.props(settings), "dashboard"))
+    val ghService =
+      context.watch(
+        context.actorOf(GithubService.props(settings, List(bot, dashboard)),
+                        "github-service"))
+    context.watch(
+      context.actorOf(HttpServer.props(settings, ghService, bot, dashboard),
+                      "http-server"))
   }
 }

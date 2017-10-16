@@ -12,13 +12,11 @@ object Bot {
 
 class Bot(settingts: Settings) extends Actor with ActorLogging {
 
-  override def preStart(): Unit = {
+  override def preStart(): Unit =
     log.info("Minion bot started")
-  }
 
-  override def postStop(): Unit = {
+  override def postStop(): Unit =
     log.info("Minion bot stopped")
-  }
 
   override def receive: Receive = {
     case App.ServicePing => sender() ! App.ServicePong

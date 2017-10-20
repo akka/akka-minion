@@ -38,6 +38,7 @@ object Dashboard {
 
   case class Person(login: String, avatarUrl: String)
   case class Performance(person: Person, action: Action, performedAt: ZonedDateTime)
+  case class Repo(name: String, fullName: String)
 
   case class ApiUsageStats(limit: Int, remaining: Int, resetsIn: String)
 
@@ -45,23 +46,22 @@ object Dashboard {
   case class MainDashboardReply(report: Option[MainDashboardData])
 
   case class MainDashboardData(
-    repo: String,
-    pulls: Seq[MainDashboardEntry],
-    usageStats: ApiUsageStats
+      pulls: Iterable[MainDashboardEntry],
+      usageStats: ApiUsageStats
   )
 
-
   case class MainDashboardEntry(
-    author: Person,
-    number: Int,
-    title: String,
-    lastUpdated: String,
-    people: Set[Performance],
-    lastActor: Performance,
-    mergeable: Option[Boolean],
-    status: PrValidationStatus,
-    reviewedOk: Int,
-    reviewedReject: Int
+      repo: Repo,
+      author: Person,
+      number: Int,
+      title: String,
+      lastUpdated: String,
+      people: Set[Performance],
+      lastActor: Performance,
+      mergeable: Option[Boolean],
+      status: PrValidationStatus,
+      reviewedOk: Int,
+      reviewedReject: Int
   )
 
   // Personal dashboard
@@ -69,13 +69,12 @@ object Dashboard {
   case class PersonalDashboardReply(report: Option[PersonalDashboard])
 
   case class PersonalDashboard(
-    person: String,
-    repo: String,
-    ownPrs: Seq[PersonalDashboardEntry],
-    teamPrs: Seq[PersonalDashboardEntry],
-    externalPrs: Seq[PersonalDashboardEntry]
+      person: String,
+      ownPrs: Iterable[PersonalDashboardEntry],
+      teamPrs: Iterable[PersonalDashboardEntry],
+      externalPrs: Iterable[PersonalDashboardEntry]
   )
-  case class PersonalDashboardEntry(pr: PullRequest, action: PrAction)
+  case class PersonalDashboardEntry(repo: Repo, pr: PullRequest, action: PrAction)
 
   sealed trait PrAction
   case object NoAction extends PrAction
@@ -85,17 +84,22 @@ object Dashboard {
   case object PleaseFix extends PrAction
 
   implicit class ZonedDateTimeOps(datetime: ZonedDateTime) {
-    def prettyAgo: String = Duration.between(datetime, ZonedDateTime.now) match {
-      case d if d.toMinutes < 60 => s"${d.toMinutes} minutes ago"
-      case d if d.toHours < 24 => s"${d.toHours} hours ago"
-      case d if d.toDays < 31 => s"${d.toDays} days ago"
-      case d => s"months ago"
-    }
+    def ending(value: Long, suffix: String) =
+      s"$value $suffix${if (value > 1) "s" else ""} ago"
 
-    def prettyIn: String = Duration.between(ZonedDateTime.now, datetime) match {
-      case d if d.toMinutes < 60 => s"in ${d.toMinutes} minutes"
-      case d => s"in more than an hour"
-    }
+    def prettyAgo: String =
+      Duration.between(datetime, ZonedDateTime.now) match {
+        case d if d.toMinutes < 60 => ending(d.toMinutes, "minute")
+        case d if d.toHours < 24 => ending(d.toHours, "hour")
+        case d if d.toDays < 31 => ending(d.toDays, "day")
+        case d => ending(d.toDays / 30, "month")
+      }
+
+    def prettyIn: String =
+      Duration.between(ZonedDateTime.now, datetime) match {
+        case d if d.toMinutes < 60 => s"in ${d.toMinutes} minutes"
+        case d => s"in more than an hour"
+      }
   }
 }
 
@@ -107,20 +111,20 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
 
   private var personalReports: Map[String, PersonalDashboard] = Map.empty
 
-  override def preStart(): Unit = {
+  override def preStart(): Unit =
     log.info("Dashboard started")
-  }
 
-  override def postStop(): Unit = {
+  override def postStop(): Unit =
     log.info("Dashboard stopped")
-  }
 
   override def receive: Receive = {
     case App.ServicePing =>
       sender() ! App.ServicePong
 
     case report: FullReport =>
-      log.info(s"Received fresh report for ${report.repo}. Remaining API quota: ${report.usageStats.rate.remaining}")
+      log.info(
+        s"Received fresh report for ${report.pulls.keys.map(_.name)}. Remaining API quota: ${report.usageStats.rate.remaining}"
+      )
       lastFullReport = Some(report)
       lastMainReport = Some(createMainDashboard(report))
       personalReports = Map.empty
@@ -129,104 +133,131 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
       sender() ! MainDashboardReply(lastMainReport)
 
     case GetPersonalDashboard(person) =>
-      if (personalReports.contains(person)) sender() ! PersonalDashboardReply(Some(personalReports(person)))
-      else sender() ! PersonalDashboardReply(lastFullReport.map(createPersonalDashboard(person, _)))
+      if (personalReports.contains(person))
+        sender() ! PersonalDashboardReply(Some(personalReports(person)))
+      else
+        sender() ! PersonalDashboardReply(lastFullReport.map(createPersonalDashboard(person, _)))
   }
 
-
   private def createMainDashboard(report: FullReport): MainDashboardData = {
-    val entries = report.pulls.map { pull =>
-      val comments = report.comments(pull)
-      val status = report.statuses(pull)
-      val reviews = report.reviews(pull)
+    val entries = report.pulls
+      .flatMap {
+        case (repo, pulls) =>
+          pulls.map { pull =>
+            val comments = report.comments(pull)
+            val status = report.statuses(pull)
+            val reviews = report.reviews(pull)
 
-      val commenters = comments.collect {
-        case IssueComment(_, Some(user), Some(created), _, _) if !settings.bots(user.login) =>
-          Performance(Person(user.login, user.avatar_url), Action.Commented, created)
+            val commenters = comments.collect {
+              case IssueComment(_, Some(user), Some(created), _, _) if !settings.bots(user.login) =>
+                Performance(Person(user.login, user.avatar_url), Action.Commented, created)
+            }
+
+            val reviewers = reviews.collect {
+              case review @ PullRequestReview(user, _, Some(created), _) if !settings.bots(user.login) =>
+                Performance(Person(user.login, user.avatar_url), Action.toAction(review), created)
+            }
+
+            val involvedPeople = (commenters ++ reviewers).toSeq
+              .groupBy(_.person.login)
+              .map {
+                case (_, performances) =>
+                  // pr approval/rejection is more important than comments
+                  performances
+                    .find(p => Seq(Action.Approved, Action.RequestedChanges).contains(p.action))
+                    .getOrElse(performances.head)
+              }
+              .toSet
+
+            def lastPerformance = {
+              val creation =
+                Performance(Person(pull.user.login, pull.user.avatar_url), Action.OpenedPr, pull.created_at.get)
+              val lastComment = commenters.lastOption
+              val lastReview = reviewers.lastOption
+
+              (Seq(creation) ++ lastComment ++ lastReview).maxBy(_.performedAt.toInstant)
+            }
+
+            MainDashboardEntry(
+              repo = Repo(repo.name, repo.full_name),
+              author = Person(pull.user.login, pull.user.avatar_url),
+              number = pull.number,
+              title = pull.title,
+              lastUpdated = pull.updated_at.fold("long time ago...")(_.prettyAgo),
+              people = involvedPeople,
+              lastActor = lastPerformance,
+              mergeable = pull.mergeable,
+              status =
+                if (status.statuses.exists(_.state == CommitStatusConstants.PENDING))
+                  PrValidationStatus.Pending
+                else if (status.statuses.exists(_.state == CommitStatusConstants.FAILURE))
+                  PrValidationStatus.Failure
+                else PrValidationStatus.Success,
+              reviewedOk = reviews.count(_.approved),
+              reviewedReject = reviews.count(_.changesRequested)
+            )
+          }
       }
+      .toSeq
+      .sortBy(_.lastActor.performedAt)(Ordering.fromLessThan(_ isBefore _))
 
-      val reviewers = reviews.collect {
-        case review@PullRequestReview(user, _, Some(created), _) if !settings.bots(user.login) =>
-          Performance(Person(user.login, user.avatar_url), Action.toAction(review), created)
-      }
-
-      val involvedPeople = (commenters ++ reviewers).toSeq.groupBy(_.person.login).map {
-        case (_, performances) =>
-          // pr approval/rejection is more important than comments
-          performances
-            .find(p => Seq(Action.Approved, Action.RequestedChanges).contains(p.action))
-            .getOrElse(performances.head)
-        }.toSet
-
-      def lastPerformance = {
-        val creation = Performance(Person(pull.user.login, pull.user.avatar_url), Action.OpenedPr, pull.created_at.get)
-        val lastComment = commenters.lastOption
-        val lastReview = reviewers.lastOption
-
-        (Seq(creation) ++ lastComment ++ lastReview).sortBy(_.performedAt.toInstant).last
-      }
-
-      MainDashboardEntry(
-        author = Person(pull.user.login, pull.user.avatar_url),
-        number = pull.number,
-        title = pull.title,
-        lastUpdated = pull.updated_at.fold("long time ago...")(_.prettyAgo),
-        people = involvedPeople,
-        lastActor = lastPerformance,
-        mergeable = pull.mergeable,
-        status =
-          if (status.statuses.exists(_.state == CommitStatusConstants.PENDING)) PrValidationStatus.Pending
-          else if (status.statuses.exists(_.state == CommitStatusConstants.FAILURE)) PrValidationStatus.Failure
-          else PrValidationStatus.Success,
-        reviewedOk = reviews.count(_.approved),
-        reviewedReject = reviews.count(_.changesRequested)
-      )
-
-    }
-
-    MainDashboardData(
-      report.repo.full_name,
-      entries,
-      ApiUsageStats(
-        report.usageStats.rate.limit,
-        report.usageStats.rate.remaining,
-        report.usageStats.rate.reset.prettyIn))
+    MainDashboardData(entries,
+                      ApiUsageStats(report.usageStats.rate.limit,
+                                    report.usageStats.rate.remaining,
+                                    report.usageStats.rate.reset.prettyIn))
   }
 
   private def createPersonalDashboard(person: String, report: FullReport): PersonalDashboard = {
     log.info(s"Updating dashboard for $person")
 
-    def actionFor(pr: PullRequest): PrAction = {
-      if (
-        pr.mergeable.getOrElse(true) &&
-        !report.statuses(pr).statuses.exists(_.state == CommitStatusConstants.FAILURE) &&
-        !report.reviews(pr).exists(_.user.login == person)
-      ) PleaseReview
+    def actionFor(pr: PullRequest): PrAction =
+      if (pr.mergeable.getOrElse(true) &&
+          !report
+            .statuses(pr)
+            .statuses
+            .exists(_.state == CommitStatusConstants.FAILURE) &&
+          !report.reviews(pr).exists(_.user.login == person)) PleaseReview
       else NoAction
-    }
 
-    val (ownPrs, rest) = report.pulls.partition(_.user.login == person)
+    val (ownActions, teamActions, externalActions) = report.pulls
+      .map {
+        case (repo, pulls) =>
+          val (ownPrs, rest) = pulls.partition(_.user.login == person)
 
-    val (teamPrs, externalPrs) = rest.partition { pr => settings.teamMembers(pr.user.login) }
+          val (teamPrs, externalPrs) = rest.partition { pr =>
+            settings.teamMembers(pr.user.login)
+          }
 
-    val ownActions = ownPrs.map { pr =>
-      val action =
-        if (!pr.mergeable.getOrElse(true)) PleaseRebase
-        else if (report.reviews(pr).exists(_.changesRequested)) PleaseResolve
-        else if (report.statuses(pr).statuses.exists(_.state == CommitStatusConstants.FAILURE)) PleaseFix
-        else NoAction
+          val ownEntries = ownPrs.map { pr =>
+            val action =
+              if (!pr.mergeable.getOrElse(true)) PleaseRebase
+              else if (report.reviews(pr).exists(_.changesRequested)) PleaseResolve
+              else if (report
+                         .statuses(pr)
+                         .statuses
+                         .exists(_.state == CommitStatusConstants.FAILURE)) PleaseFix
+              else NoAction
 
-      PersonalDashboardEntry(pr, action)
-    }
+            PersonalDashboardEntry(Repo(repo.name, repo.full_name), pr, action)
+          }
+
+          val teamEntries =
+            teamPrs.map(pr => PersonalDashboardEntry(Repo(repo.name, repo.full_name), pr, actionFor(pr)))
+          val externalEntries =
+            externalPrs.map(pr => PersonalDashboardEntry(Repo(repo.name, repo.full_name), pr, actionFor(pr)))
+
+          (ownEntries, teamEntries, externalEntries)
+      }
+      .reduce { (report1, report2) =>
+        (report1._1 ++ report2._1, report1._2 ++ report1._2, report1._3 ++ report2._3)
+      }
 
     PersonalDashboard(
       person,
-      report.repo.full_name,
       ownActions,
-      teamPrs.map( pr => PersonalDashboardEntry(pr, actionFor(pr))),
-      externalPrs.map( pr => PersonalDashboardEntry(pr, actionFor(pr)))
+      teamActions,
+      externalActions
     )
-
 
   }
 

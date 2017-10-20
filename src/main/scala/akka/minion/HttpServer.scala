@@ -5,7 +5,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.minion.Dashboard._
-import akka.pattern.{AskTimeoutException, ask}
+import akka.pattern.{ask, AskTimeoutException}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 
@@ -15,8 +15,6 @@ import scalatags.Text.TypedTag
 import scalatags.stylesheet.{CascadingStyleSheet, Cls}
 
 object HttpServer {
-
-
 
   def props(settings: App.Settings, ghService: ActorRef, bot: ActorRef, dashboard: ActorRef): Props =
     Props(new HttpServer(settings, ghService, bot, dashboard))
@@ -28,7 +26,8 @@ class HttpServer(
     val githubService: ActorRef,
     val bot: ActorRef,
     val dashboard: ActorRef
-  ) extends Actor with ActorLogging {
+) extends Actor
+    with ActorLogging {
   import context.dispatcher
 
   private implicit val materializer = ActorMaterializer()
@@ -36,45 +35,44 @@ class HttpServer(
 
   implicit val timeout = Timeout(3.seconds)
 
-
   private val route =
-    pathSingleSlash {
-      get {
-        val ghStatus = serviceStatus(githubService)
-        val botStatus = serviceStatus(bot)
-        val dashboardStatus = serviceStatus(dashboard)
+  pathSingleSlash {
+    get {
+      val ghStatus = serviceStatus(githubService)
+      val botStatus = serviceStatus(bot)
+      val dashboardStatus = serviceStatus(dashboard)
 
-        complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
-      }
-    } ~
-    path("overview") {
-      get {
-        val reportFuture =
-          (dashboard ? GetMainDashboard).mapTo[MainDashboardReply]
+      complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
+    }
+  } ~
+  path("overview") {
+    get {
+      val reportFuture =
+        (dashboard ? GetMainDashboard)
+          .mapTo[MainDashboardReply]
           .map(reply => Template(Template.mainDashboard(reply.report)))
 
-        complete(reportFuture)
-      }
-    } ~
-    path("personal" / Segment) { person =>
-      get {
-        val reportFuture =
-          (dashboard ? GetPersonalDashboard(person)).mapTo[PersonalDashboardReply]
-            .map(reply => Template(Template.personalDashboard(reply.report)))
-
-        complete(reportFuture)
-      }
+      complete(reportFuture)
     }
+  } ~
+  path("personal" / Segment) { person =>
+    get {
+      val reportFuture =
+        (dashboard ? GetPersonalDashboard(person))
+          .mapTo[PersonalDashboardReply]
+          .map(reply => Template(Template.personalDashboard(reply.report)))
 
-  def serviceStatus(service: ActorRef): Future[String] = {
+      complete(reportFuture)
+    }
+  }
 
-    (service ? App.ServicePing).mapTo[App.ServicePong.type]
+  def serviceStatus(service: ActorRef): Future[String] =
+    (service ? App.ServicePing)
+      .mapTo[App.ServicePong.type]
       .map(_ => "Up")
       .recover {
         case _: AskTimeoutException => "Down"
       }
-  }
-
 
   override def preStart(): Unit = {
     bindingFuture = Http(context.system).bindAndHandle(route, "0.0.0.0", settings.httpPort)
@@ -94,7 +92,6 @@ class HttpServer(
 
 object Template {
   import scalatags.Text.all._
-
 
   def apply(content: TypedTag[String]): HttpEntity.Strict = {
     val tags = html(
@@ -124,7 +121,7 @@ object Template {
         )
       ),
       body(
-        div(`class`:="container", content)
+        div(`class` := "container", content)
       )
     )
 
@@ -132,28 +129,34 @@ object Template {
 
   }
 
-
-  def mainDashboard(data: Option[MainDashboardData]): TypedTag[String] = {
+  def mainDashboard(data: Option[MainDashboardData]): TypedTag[String] =
     data match {
       case None => alert(p("No dashboard data is available"), "info")
       case Some(report) =>
-        val repoUrl = s"https://github.com/${report.repo}"
+        def repoUrl(name: String) = s"https://github.com/$name"
 
         div(
-          h2(s"Report on ${report.repo}"),
+          h2(s"Report"),
           table(
-            `class`:="table table-condensed",
+            `class` := "table table-condensed",
             thead(
               tr(
-                th("Title"), th("Last Updated"), th("People"), th("Last actor"), th("M"), th("S"), th("R")
+                th("Title"),
+                th("Last Updated"),
+                th("People"),
+                th("Last actor"),
+                th("M"),
+                th("S"),
+                th("R")
               )
             ),
             tbody(
-              for (pull <- report.pulls) yield {
+              for (pull <- report.pulls.toSeq) yield {
                 tr(
                   td(
                     person(pull.author),
-                    a(href:=repoUrl + "/pull/" + pull.number, s"${pull.number}: ${pull.title}")
+                    a(href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
+                      s"${pull.repo.name}#${pull.number}: ${pull.title}")
                   ),
                   td(Style.noWrap, pull.lastUpdated),
                   td(pull.people.map(involvment).toSeq),
@@ -171,13 +174,11 @@ object Template {
         )
     }
 
-  }
-
-  def personalDashboard(data: Option[PersonalDashboard]): TypedTag[String] = {
+  def personalDashboard(data: Option[PersonalDashboard]): TypedTag[String] =
     data match {
       case None => alert(p("No dashboard data is available"), "info")
       case Some(report) =>
-        val repoUrl = s"https://github.com/${report.repo}"
+        def repoUrl(name: String) = s"https://github.com/$name"
 
         def renderAction(action: PrAction): TypedTag[String] = action match {
           case NoAction => p("N/A")
@@ -187,24 +188,27 @@ object Template {
           case PleaseRebase => p("Rebase")
         }
 
-        def mkTable(data: Seq[PersonalDashboardEntry]): TypedTag[String] =
+        def mkTable(data: Iterable[PersonalDashboardEntry]): TypedTag[String] =
           table(
-            `class`:="table table-condensed",
+            `class` := "table table-condensed",
             thead(
               tr(
-                th("Title"), th("Action")
+                th("Title"),
+                th("Action")
               )
             ),
             tbody(
-              for (entry <- data if entry.action != NoAction) yield {
+              for (entry <- data.toSeq if entry.action != NoAction) yield {
                 tr(
-                  td(a(href:=repoUrl + "/pull/" + entry.pr.number, s"${entry.pr.number}: ${entry.pr.title}")),
+                  td(
+                    a(href := s"${repoUrl(entry.repo.fullName)}/pull/${entry.pr.number}",
+                      s"${entry.pr.number}: ${entry.pr.title}")
+                  ),
                   td(renderAction(entry.action))
                 )
               }
             )
           )
-
 
         div(
           h1(s"Personal report for ${report.person}"),
@@ -216,48 +220,40 @@ object Template {
           mkTable(report.externalPrs)
         )
     }
-  }
 
-  def threeState(state: Option[Boolean]): TypedTag[String] = {
+  def threeState(state: Option[Boolean]): TypedTag[String] =
     state match {
       case None => p("")
       case Some(bool) => p(bool.toString())
     }
-  }
 
   def alert(content: TypedTag[String], kind: String): TypedTag[String] =
-    div(`class`:=s"alert alert-$kind", role:="alert", content)
+    div(`class` := s"alert alert-$kind", role := "alert", content)
 
-  def panel(heading: String, content: TypedTag[String]): TypedTag[String] = {
+  def panel(heading: String, content: TypedTag[String]): TypedTag[String] =
     div(
-      `class`:="panel panel-default",
-      div(`class`:="panel-heading", heading),
-      div(`class`:="panel-body", content)
+      `class` := "panel panel-default",
+      div(`class` := "panel-heading", heading),
+      div(`class` := "panel-body", content)
     )
-  }
 
-  def servicesStatus(ghStatus: String): TypedTag[String] = {
-    panel("Services Status",
-      p("Github poller", ghStatus)
-    )
-  }
+  def servicesStatus(ghStatus: String): TypedTag[String] =
+    panel("Services Status", p("Github poller", ghStatus))
 
-  def involvment(p: Performance): TypedTag[String] = {
+  def involvment(p: Performance): TypedTag[String] =
     person(p.person, (p.action match {
       case Action.Approved => Seq(Style.good)
       case Action.RequestedChanges => Seq(Style.bad)
       case _ => Seq()
-    }):_*)
-  }
+    }): _*)
 
-  def person(p: Person, styles: Cls*): TypedTag[String] = {
+  def person(p: Person, styles: Cls*): TypedTag[String] =
     img(
       Style.avatar,
       styles,
       src := p.avatarUrl,
       title := p.login
     )
-  }
 
   def performance(perf: Performance): Seq[TypedTag[String]] = {
     val (icon, titleText) = perf.action match {
@@ -270,33 +266,38 @@ object Template {
 
     Seq(
       person(perf.person),
-      span(`class` := s"octicon octicon-$icon", title:=titleText)
+      span(`class` := s"octicon octicon-$icon", title := titleText)
     )
   }
 
   def reviewStatus(pull: MainDashboardEntry): TypedTag[String] = {
     val (icon, titleText, style) = pull match {
-      case p if p.reviewedReject > 0 => ("x", "Changes requested", Style.badIcon)
-      case p if p.reviewedOk >= 2 => ("check", "Pull Request approved", Style.goodIcon)
+      case p if p.reviewedReject > 0 =>
+        ("x", "Changes requested", Style.badIcon)
+      case p if p.reviewedOk >= 2 =>
+        ("check", "Pull Request approved", Style.goodIcon)
       case _ => ("", "", Style.empty)
     }
     span(
-      `class`:=s"octicon octicon-$icon",
+      `class` := s"octicon octicon-$icon",
       style,
-      title:=titleText
+      title := titleText
     )
   }
 
   def validationStatus(status: PrValidationStatus): TypedTag[String] = {
     val (icon, titleText, style) = status match {
-      case PrValidationStatus.Success => ("check", "All PR validations passed", Style.goodIcon)
-      case PrValidationStatus.Pending => ("clock", "PR validation in progress", Style.indifferentIcon)
-      case PrValidationStatus.Failure => ("x", "PR validation failed", Style.badIcon)
+      case PrValidationStatus.Success =>
+        ("check", "All PR validations passed", Style.goodIcon)
+      case PrValidationStatus.Pending =>
+        ("clock", "PR validation in progress", Style.indifferentIcon)
+      case PrValidationStatus.Failure =>
+        ("x", "PR validation failed", Style.badIcon)
     }
     span(
-      `class`:=s"octicon octicon-$icon",
+      `class` := s"octicon octicon-$icon",
       style,
-      title:=titleText
+      title := titleText
     )
   }
 }
@@ -307,36 +308,36 @@ object Style extends CascadingStyleSheet {
   initStyleSheet()
 
   val avatar = cls(
-    width:="24px",
-    height:="24px",
-    borderRadius:="4px",
-    marginRight:="8px"
+    width := "24px",
+    height := "24px",
+    borderRadius := "4px",
+    marginRight := "8px"
   )
 
   val good = cls(
-    border:="2px solid green",
-    padding:="1px"
+    border := "2px solid green",
+    padding := "1px"
   )
 
   val bad = cls(
-    border:="2px solid red",
-    padding:="1px"
+    border := "2px solid red",
+    padding := "1px"
   )
 
   val goodIcon = cls(
-    color:="green"
+    color := "green"
   )
 
   val indifferentIcon = cls(
-    color:="orange"
+    color := "orange"
   )
 
   val badIcon = cls(
-    color:="red"
+    color := "red"
   )
 
   val noWrap = cls(
-    whiteSpace:="nowrap"
+    whiteSpace := "nowrap"
   )
 
   val empty = cls()

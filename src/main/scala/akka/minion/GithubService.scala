@@ -54,7 +54,8 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   case object Refresh
   case class ClientFailed(ex: Throwable)
 
-  def props(settings: Settings, listeners: Seq[ActorRef]): Props = Props(new GithubService(settings, listeners))
+  def props(settings: Settings, listeners: Seq[ActorRef]): Props =
+    Props(new GithubService(settings, listeners))
 
   object CommitStatusConstants {
     final val SUCCESS = "success"
@@ -64,7 +65,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     // context to enforce that last commit is green only if all prior commits are also green
     final val COMBINED = "combined"
     final val REVIEWED = "reviewed"
-    final val CLA      = "cla"
+    final val CLA = "cla"
 
     def jenkinsContext(ctx: String) = ctx match {
       case COMBINED | REVIEWED | CLA => false
@@ -73,19 +74,34 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   }
 
   case class User(login: String, avatar_url: String)
-  case class Author(name: String, email: String) {// , username: Option[String]
+  case class Author(name: String, email: String) { // , username: Option[String]
     override def toString = name
   }
-  case class Repository(name: String, full_name: String, git_url: String,
-                        updated_at: Option[ZonedDateTime], created_at: Option[ZonedDateTime], pushed_at: Option[ZonedDateTime]) { // owner: Either[User, Author]
+  case class Repository(name: String,
+                        full_name: String,
+                        git_url: String,
+                        updated_at: Option[ZonedDateTime],
+                        created_at: Option[ZonedDateTime],
+                        pushed_at: Option[ZonedDateTime]) { // owner: Either[User, Author]
     override def toString = full_name
   }
   case class GitRef(sha: String, label: String, ref: String, repo: Repository, user: User) {
     override def toString = s"${repo}#${sha.take(7)}"
   }
-  case class PullRequest(number: Int, state: String, title: String, body: Option[String],
-                         created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], closed_at: Option[ZonedDateTime], merged_at: Option[ZonedDateTime],
-                         head: GitRef, base: GitRef, user: User, merged: Option[Boolean], mergeable: Option[Boolean], merged_by: Option[User]) {
+  case class PullRequest(number: Int,
+                         state: String,
+                         title: String,
+                         body: Option[String],
+                         created_at: Option[ZonedDateTime],
+                         updated_at: Option[ZonedDateTime],
+                         closed_at: Option[ZonedDateTime],
+                         merged_at: Option[ZonedDateTime],
+                         head: GitRef,
+                         base: GitRef,
+                         user: User,
+                         merged: Option[Boolean],
+                         mergeable: Option[Boolean],
+                         merged_by: Option[User]) {
     override def toString = s"${base.repo}#$number"
   }
 
@@ -96,37 +112,74 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   object Milestone {
     private val MergeBranch = """Merge to (\S+)\b""".r.unanchored
   }
-  case class Milestone(number: Int, state: String, title: String, description: Option[String], creator: User,
-                       created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], closed_at: Option[ZonedDateTime], due_on: Option[ZonedDateTime]) {
+  case class Milestone(number: Int,
+                       state: String,
+                       title: String,
+                       description: Option[String],
+                       creator: User,
+                       created_at: Option[ZonedDateTime],
+                       updated_at: Option[ZonedDateTime],
+                       closed_at: Option[ZonedDateTime],
+                       due_on: Option[ZonedDateTime]) {
     override def toString = s"Milestone $title ($state)"
 
     def mergeBranch = description match {
       case Some(Milestone.MergeBranch(branch)) => Some(branch)
-      case _                                   => None
+      case _ => None
     }
   }
 
-  case class Issue(number: Int, state: String, title: String, body: Option[String], user: User, labels: List[Label],
-                   assignee: Option[User], milestone: Option[Milestone], created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], closed_at: Option[ZonedDateTime]) {
+  case class Issue(number: Int,
+                   state: String,
+                   title: String,
+                   body: Option[String],
+                   user: User,
+                   labels: List[Label],
+                   assignee: Option[User],
+                   milestone: Option[Milestone],
+                   created_at: Option[ZonedDateTime],
+                   updated_at: Option[ZonedDateTime],
+                   closed_at: Option[ZonedDateTime]) {
     override def toString = s"Issue #$number"
   }
 
-  case class CommitInfo(id: Option[String], message: String, timestamp: Option[ZonedDateTime], author: Author, committer: Author)
+  case class CommitInfo(id: Option[String],
+                        message: String,
+                        timestamp: Option[ZonedDateTime],
+                        author: Author,
+                        committer: Author)
   // added: Option[List[String]], removed: Option[List[String]], modified: Option[List[String]]
   case class Commit(sha: String, commit: CommitInfo, url: Option[String] = None)
 
   case class CombiCommitStatus(state: String, sha: String, statuses: List[CommitStatus], total_count: Int)
 
-  case class CommitStatus(state: String, context: Option[String] = None, description: Option[String] = None, target_url: Option[String] = None)
+  case class CommitStatus(state: String,
+                          context: Option[String] = None,
+                          description: Option[String] = None,
+                          target_url: Option[String] = None)
 
-  case class IssueComment(body: String, user: Option[User] = None, created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], id: Option[Long] = None)
+  case class IssueComment(body: String,
+                          user: Option[User] = None,
+                          created_at: Option[ZonedDateTime],
+                          updated_at: Option[ZonedDateTime],
+                          id: Option[Long] = None)
 
-  case class PullRequestComment(body: String, user: Option[User] = None, commit_id: Option[String] = None, path: Option[String] = None, position: Option[Int] = None, created_at: Option[ZonedDateTime], updated_at: Option[ZonedDateTime], id: Option[Long] = None)
+  case class PullRequestComment(body: String,
+                                user: Option[User] = None,
+                                commit_id: Option[String] = None,
+                                path: Option[String] = None,
+                                position: Option[Int] = None,
+                                created_at: Option[ZonedDateTime],
+                                updated_at: Option[ZonedDateTime],
+                                id: Option[Long] = None)
 
   case class PullRequestEvent(action: String, number: Int, pull_request: PullRequest)
   case class PushEvent(ref: String, commits: List[CommitInfo], repository: Repository)
 
-  case class PullRequestReviewCommentEvent(action: String, pull_request: PullRequest, comment: PullRequestComment, repository: Repository)
+  case class PullRequestReviewCommentEvent(action: String,
+                                           pull_request: PullRequest,
+                                           comment: PullRequestComment,
+                                           repository: Repository)
   case class IssueCommentEvent(action: String, issue: Issue, comment: IssueComment, repository: Repository)
 
   object ReviewStatusConstants {
@@ -149,43 +202,52 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   case class UsageStats(rate: RateLimit)
 
   private type RJF[x] = RootJsonFormat[x]
-  implicit lazy val _fmtUser             : RJF[User]                          = jsonFormat2(User)
-  implicit lazy val _fmtAuthor           : RJF[Author]                        = jsonFormat2(Author)
-  implicit lazy val _fmtRepository       : RJF[Repository]                    = jsonFormat6(Repository)
+  implicit lazy val _fmtUser: RJF[User] = jsonFormat2(User)
+  implicit lazy val _fmtAuthor: RJF[Author] = jsonFormat2(Author)
+  implicit lazy val _fmtRepository: RJF[Repository] = jsonFormat6(Repository)
 
-  implicit lazy val _fmtGitRef           : RJF[GitRef]                        = jsonFormat5(GitRef)
+  implicit lazy val _fmtGitRef: RJF[GitRef] = jsonFormat5(GitRef)
 
-  implicit lazy val _fmtPullRequest      : RJF[PullRequest]                   = jsonFormat14(PullRequest)
+  implicit lazy val _fmtPullRequest: RJF[PullRequest] = jsonFormat14(PullRequest)
 
-  implicit lazy val _fmtLabel            : RJF[Label]                         = jsonFormat3(Label)
-  implicit lazy val _fmtMilestone        : RJF[Milestone]                     = jsonFormat9(Milestone.apply)
-  implicit lazy val _fmtIssue            : RJF[Issue]                         = jsonFormat11(Issue)
+  implicit lazy val _fmtLabel: RJF[Label] = jsonFormat3(Label)
+  implicit lazy val _fmtMilestone: RJF[Milestone] = jsonFormat9(Milestone.apply)
+  implicit lazy val _fmtIssue: RJF[Issue] = jsonFormat11(Issue)
 
-  implicit lazy val _fmtCommitInfo       : RJF[CommitInfo]                    = jsonFormat5(CommitInfo)
-  implicit lazy val _fmtCommit           : RJF[Commit]                        = jsonFormat3(Commit)
-  implicit lazy val _fmtCommitStatus     : RJF[CommitStatus]                  = jsonFormat4(CommitStatus.apply)
-  implicit lazy val _fmtCombiCommitStatus: RJF[CombiCommitStatus]             = jsonFormat(CombiCommitStatus, "state", "sha", "statuses", "total_count") // need to specify field names because we added methods to the case class..
+  implicit lazy val _fmtCommitInfo: RJF[CommitInfo] = jsonFormat5(CommitInfo)
+  implicit lazy val _fmtCommit: RJF[Commit] = jsonFormat3(Commit)
+  implicit lazy val _fmtCommitStatus: RJF[CommitStatus] = jsonFormat4(CommitStatus.apply)
+  implicit lazy val _fmtCombiCommitStatus: RJF[CombiCommitStatus] = jsonFormat(
+    CombiCommitStatus,
+    "state",
+    "sha",
+    "statuses",
+    "total_count"
+  ) // need to specify field names because we added methods to the case class..
 
-  implicit lazy val _fmtIssueComment     : RJF[IssueComment]                  = jsonFormat5(IssueComment)
-  implicit lazy val _fmtPullRequestComment: RJF[PullRequestComment]           = jsonFormat8(PullRequestComment)
+  implicit lazy val _fmtIssueComment: RJF[IssueComment] = jsonFormat5(IssueComment)
+  implicit lazy val _fmtPullRequestComment: RJF[PullRequestComment] =
+    jsonFormat8(PullRequestComment)
 
-  implicit lazy val _fmtPullRequestEvent : RJF[PullRequestEvent]              = jsonFormat3(PullRequestEvent)
-  implicit lazy val _fmtPushEvent        : RJF[PushEvent]                     = jsonFormat3(PushEvent)
-  implicit lazy val _fmtPRCommentEvent   : RJF[PullRequestReviewCommentEvent] = jsonFormat4(PullRequestReviewCommentEvent)
-  implicit lazy val _fmtIssueCommentEvent: RJF[IssueCommentEvent]             = jsonFormat4(IssueCommentEvent)
+  implicit lazy val _fmtPullRequestEvent: RJF[PullRequestEvent] = jsonFormat3(PullRequestEvent)
+  implicit lazy val _fmtPushEvent: RJF[PushEvent] = jsonFormat3(PushEvent)
+  implicit lazy val _fmtPRCommentEvent: RJF[PullRequestReviewCommentEvent] =
+    jsonFormat4(PullRequestReviewCommentEvent)
+  implicit lazy val _fmtIssueCommentEvent: RJF[IssueCommentEvent] =
+    jsonFormat4(IssueCommentEvent)
 
-  implicit lazy val _fmtPullRequestReview: RJF[PullRequestReview]             = jsonFormat4(PullRequestReview)
+  implicit lazy val _fmtPullRequestReview: RJF[PullRequestReview] =
+    jsonFormat4(PullRequestReview)
 
-  implicit lazy val _fmtRateLimit        : RJF[RateLimit]                     = jsonFormat3(RateLimit)
-  implicit lazy val _fmtUsageStats       : RJF[UsageStats]                    = jsonFormat1(UsageStats)
+  implicit lazy val _fmtRateLimit: RJF[RateLimit] = jsonFormat3(RateLimit)
+  implicit lazy val _fmtUsageStats: RJF[UsageStats] = jsonFormat1(UsageStats)
 
   case class FullReport(
-    repo: Repository,
-    pulls: Seq[PullRequest],
-    comments: Map[PullRequest, Seq[IssueComment]],
-    statuses: Map[PullRequest, CombiCommitStatus],
-    reviews: Map[PullRequest, Seq[PullRequestReview]],
-    usageStats: UsageStats
+      pulls: Map[Repository, Seq[PullRequest]],
+      comments: Map[PullRequest, Seq[IssueComment]],
+      statuses: Map[PullRequest, CombiCommitStatus],
+      reviews: Map[PullRequest, Seq[PullRequestReview]],
+      usageStats: UsageStats
   )
 
 }
@@ -204,15 +266,19 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
 
   // Throttled global connection pool
   val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
-    Source.queue[(HttpRequest, Promise[HttpResponse])](256, OverflowStrategy.backpressure)
-      .throttle(settings.apiCallPerHour, 1.hour, 100, ThrottleMode.shaping)
+    Source
+      .queue[(HttpRequest, Promise[HttpResponse])](512, OverflowStrategy.backpressure)
+      .throttle(settings.apiCallPerHour, 1.hour, 300, ThrottleMode.shaping)
       .via(Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
-      .toMat(Sink.foreach { case (response, promise) =>
-        promise.tryComplete(response)
-      })(Keep.both).run()
+      .toMat(Sink.foreach {
+        case (response, promise) =>
+          promise.tryComplete(response)
+      })(Keep.both)
+      .run()
 
-  clientFuture.onFailure { case ex: Throwable =>
-    self ! ClientFailed(ex)
+  clientFuture.onFailure {
+    case ex: Throwable =>
+      self ! ClientFailed(ex)
   }
 
   private def throttledRequest(req: HttpRequest): Future[HttpResponse] = {
@@ -227,17 +293,23 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
 
   private def throttledJson[T: RootJsonFormat](req: HttpRequest): Future[T] = {
     val etag = responseCache.getIfPresent(req.uri)
-    throttledRequest(etag.fold(req){ case (tag, _) => req.addHeader(`If-None-Match`(tag))}).flatMap {
+    throttledRequest(etag.fold(req) {
+      case (tag, _) => req.addHeader(`If-None-Match`(tag))
+    }).flatMap {
       case response @ HttpResponse(StatusCodes.NotModified, _, _, _) =>
         response.discardEntityBytes()
         etag match {
           case Some((_, res)) => Future.successful(res.asInstanceOf[T])
-          case None => throw new Error("No changes from the cached version, but cache is empty.")
+          case None =>
+            throw new Error("No changes from the cached version, but cache is empty.")
         }
       case response @ HttpResponse(StatusCodes.OK, _, entity, _) =>
         val resp = Unmarshal(entity).to[T]
         resp.onSuccess {
-          case r => response.header[ETag].fold()(e => responseCache.put(req.uri, (e.etag, r)))
+          case r =>
+            response
+              .header[ETag]
+              .fold()(e => responseCache.put(req.uri, (e.etag, r)))
         }
         resp
       case response => Unmarshal(response.entity).to[T]
@@ -249,9 +321,8 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
     throttledJson[T](req)
   }
 
-  override def preStart(): Unit = {
+  override def preStart(): Unit =
     log.info("Starting Github service")
-  }
 
   override def postStop(): Unit = {
     log.info("Stopped Github service")
@@ -269,31 +340,32 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
       log.error(ex, "Failed to refresh Github status")
   }
 
-
   private def createReport(repo: String): Future[FullReport] = {
     val repoFuture = api[Repository](repo)
     val pullsFuture = api[Seq[PullRequest]](repo, "/pulls")
     val usageStatsFuture = api[UsageStats](repo = "", base = "/rate_limit")
 
     val pullCommentsFuture = pullsFuture.flatMap { pulls =>
-
       val allCommentFutures: Seq[Future[(PullRequest, Seq[IssueComment])]] =
         pulls.map { pull =>
-          api[Seq[IssueComment]](repo, s"/issues/${pull.number}/comments").map(pull -> _)
+          api[Seq[IssueComment]](repo, s"/issues/${pull.number}/comments")
+            .map(pull -> _)
         }
       Future.sequence(allCommentFutures).map(_.toMap)
     }
 
     val pullStatusFuture = pullsFuture.flatMap { pulls =>
       val statuses = pulls.map { pull =>
-        api[CombiCommitStatus](repo, s"/commits/${pull.head.sha}/status").map(pull -> _)
+        api[CombiCommitStatus](repo, s"/commits/${pull.head.sha}/status")
+          .map(pull -> _)
       }
       Future.sequence(statuses).map(_.toMap)
     }
 
     val pullReviewsFuture = pullsFuture.flatMap { pulls =>
       val pullReviews = pulls.map { pull =>
-        api[Seq[PullRequestReview]](repo, s"/pulls/${pull.number}/reviews").map(pull -> _)
+        api[Seq[PullRequestReview]](repo, s"/pulls/${pull.number}/reviews")
+          .map(pull -> _)
       }
       Future.sequence(pullReviews).map(_.toMap)
     }
@@ -305,9 +377,14 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
       pullStatus <- pullStatusFuture
       pullReviews <- pullReviewsFuture
       usageStats <- usageStatsFuture
-    } yield FullReport(
-      repo, pulls, pullComments, pullStatus, pullReviews, usageStats
-    )
+    } yield
+      FullReport(
+        Map(repo -> pulls),
+        pullComments,
+        pullStatus,
+        pullReviews,
+        usageStats
+      )
 
   }
 
@@ -315,7 +392,18 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
     log.info("Refreshing Github data")
     import akka.pattern.pipe
 
-    createReport("akka/akka").pipeTo(self)
-
+    Future
+      .sequence(settings.repos.map(createReport))
+      .map(_.reduce { (report1, report2) =>
+        FullReport(
+          report1.pulls ++ report2.pulls,
+          report1.comments ++ report2.comments,
+          report1.statuses ++ report2.statuses,
+          report1.reviews ++ report2.reviews,
+          if (report1.usageStats.rate.remaining < report2.usageStats.rate.remaining) report1.usageStats
+          else report2.usageStats
+        )
+      })
+      .pipeTo(self)
   }
 }

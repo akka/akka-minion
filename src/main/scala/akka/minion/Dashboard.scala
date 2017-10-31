@@ -143,60 +143,62 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
     val entries = report.pulls
       .flatMap {
         case (repo, pulls) =>
-          pulls.map { pull =>
-            val comments = report.comments(pull)
-            val status = report.statuses(pull)
-            val reviews = report.reviews(pull)
+          pulls
+            .filter(_.assignee.forall(assignee => settings.teamMembers.contains(assignee.login)))
+            .map { pull =>
+              val comments = report.comments(pull)
+              val status = report.statuses(pull)
+              val reviews = report.reviews(pull)
 
-            val commenters = comments.collect {
-              case IssueComment(_, Some(user), Some(created), _, _) if !settings.bots(user.login) =>
-                Performance(Person(user.login, user.avatar_url), Action.Commented, created)
-            }
-
-            val reviewers = reviews.collect {
-              case review @ PullRequestReview(user, _, Some(created), _) if !settings.bots(user.login) =>
-                Performance(Person(user.login, user.avatar_url), Action.toAction(review), created)
-            }
-
-            val involvedPeople = (commenters ++ reviewers).toSeq
-              .groupBy(_.person.login)
-              .map {
-                case (_, performances) =>
-                  // pr approval/rejection is more important than comments
-                  performances
-                    .find(p => Seq(Action.Approved, Action.RequestedChanges).contains(p.action))
-                    .getOrElse(performances.head)
+              val commenters = comments.collect {
+                case IssueComment(_, Some(user), Some(created), _, _) if !settings.bots(user.login) =>
+                  Performance(Person(user.login, user.avatar_url), Action.Commented, created)
               }
-              .toSet
 
-            def lastPerformance = {
-              val creation =
-                Performance(Person(pull.user.login, pull.user.avatar_url), Action.OpenedPr, pull.created_at.get)
-              val lastComment = commenters.lastOption
-              val lastReview = reviewers.lastOption
+              val reviewers = reviews.collect {
+                case review @ PullRequestReview(user, _, Some(created), _) if !settings.bots(user.login) =>
+                  Performance(Person(user.login, user.avatar_url), Action.toAction(review), created)
+              }
 
-              (Seq(creation) ++ lastComment ++ lastReview).maxBy(_.performedAt.toInstant)
+              val involvedPeople = (commenters ++ reviewers).toSeq
+                .groupBy(_.person.login)
+                .map {
+                  case (_, performances) =>
+                    // pr approval/rejection is more important than comments
+                    performances
+                      .find(p => Seq(Action.Approved, Action.RequestedChanges).contains(p.action))
+                      .getOrElse(performances.head)
+                }
+                .toSet
+
+              def lastPerformance = {
+                val creation =
+                  Performance(Person(pull.user.login, pull.user.avatar_url), Action.OpenedPr, pull.created_at.get)
+                val lastComment = commenters.lastOption
+                val lastReview = reviewers.lastOption
+
+                (Seq(creation) ++ lastComment ++ lastReview).maxBy(_.performedAt.toInstant)
+              }
+
+              MainDashboardEntry(
+                repo = Repo(repo.name, repo.full_name),
+                author = Person(pull.user.login, pull.user.avatar_url),
+                number = pull.number,
+                title = pull.title,
+                lastUpdated = pull.updated_at.fold("long time ago...")(_.prettyAgo),
+                people = involvedPeople,
+                lastActor = lastPerformance,
+                mergeable = pull.mergeable,
+                status =
+                  if (status.statuses.exists(_.state == CommitStatusConstants.PENDING))
+                    PrValidationStatus.Pending
+                  else if (status.statuses.exists(_.state == CommitStatusConstants.FAILURE))
+                    PrValidationStatus.Failure
+                  else PrValidationStatus.Success,
+                reviewedOk = reviews.count(_.approved),
+                reviewedReject = reviews.count(_.changesRequested)
+              )
             }
-
-            MainDashboardEntry(
-              repo = Repo(repo.name, repo.full_name),
-              author = Person(pull.user.login, pull.user.avatar_url),
-              number = pull.number,
-              title = pull.title,
-              lastUpdated = pull.updated_at.fold("long time ago...")(_.prettyAgo),
-              people = involvedPeople,
-              lastActor = lastPerformance,
-              mergeable = pull.mergeable,
-              status =
-                if (status.statuses.exists(_.state == CommitStatusConstants.PENDING))
-                  PrValidationStatus.Pending
-                else if (status.statuses.exists(_.state == CommitStatusConstants.FAILURE))
-                  PrValidationStatus.Failure
-                else PrValidationStatus.Success,
-              reviewedOk = reviews.count(_.approved),
-              reviewedReject = reviews.count(_.changesRequested)
-            )
-          }
       }
       .toSeq
       .sortBy(_.lastActor.performedAt)(Ordering.fromLessThan(_ isBefore _))

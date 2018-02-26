@@ -277,7 +277,7 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
       })(Keep.both)
       .run()
 
-  clientFuture.onFailure {
+  clientFuture.failed.foreach {
     case ex: Throwable =>
       self ! ClientFailed(ex)
   }
@@ -306,11 +306,11 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
         }
       case response @ HttpResponse(StatusCodes.OK, _, entity, _) =>
         val resp = Unmarshal(entity).to[T]
-        resp.onSuccess {
+        resp.foreach {
           case r =>
             response
               .header[ETag]
-              .fold()(e => responseCache.put(req.uri, (e.etag, r)))
+              .fold(())(e => responseCache.put(req.uri, (e.etag, r)))
         }
         resp
       case response => Unmarshal(response.entity).to[T]

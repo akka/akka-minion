@@ -13,13 +13,15 @@ object Dashboard {
   def props(settings: Settings): Props = Props(new Dashboard(settings))
 
   // Main dashboard
-  sealed trait Action
+  sealed trait Action {
+    def importance: Int
+  }
   object Action {
-    case object Commented extends Action
-    case object Approved extends Action
-    case object RequestedChanges extends Action
-    case object OpenedPr extends Action
-    case object Dismissed extends Action
+    case object Commented extends Action { override def importance = 2 }
+    case object Approved extends Action { override def importance = 4 }
+    case object RequestedChanges extends Action { override def importance = 3 }
+    case object OpenedPr extends Action { override def importance = 1 }
+    case object Dismissed extends Action { override def importance = 0 }
 
     def toAction(review: PullRequestReview): Action = review match {
       case r if r.commented => Action.Commented
@@ -164,10 +166,7 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
                 .groupBy(_.person.login)
                 .map {
                   case (_, performances) =>
-                    // pr approval/rejection is more important than comments
-                    performances
-                      .find(p => Seq(Action.Approved, Action.RequestedChanges).contains(p.action))
-                      .getOrElse(performances.head)
+                    performances.maxBy(_.action.importance)
                 }
                 .toSet
 
@@ -195,8 +194,8 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
                   else if (status.statuses.exists(_.state == CommitStatusConstants.FAILURE))
                     PrValidationStatus.Failure
                   else PrValidationStatus.Success,
-                reviewedOk = reviews.count(_.approved),
-                reviewedReject = reviews.count(_.changesRequested)
+                reviewedOk = involvedPeople.count(_.action == Action.Approved),
+                reviewedReject = involvedPeople.count(_.action == Action.RequestedChanges)
               )
             }
       }

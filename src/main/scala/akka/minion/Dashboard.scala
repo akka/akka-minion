@@ -40,7 +40,9 @@ object Dashboard {
 
   case class Person(login: String, avatarUrl: String)
   case class Performance(person: Person, action: Action, performedAt: ZonedDateTime)
-  case class Repo(name: String, fullName: String)
+  case class Repo(name: String, fullName: String) {
+    def denotes(fullName: String): Boolean = fullName == this.fullName
+  }
 
   case class ApiUsageStats(limit: Int, remaining: Int, resetsIn: String)
 
@@ -50,7 +52,10 @@ object Dashboard {
   case class MainDashboardData(
       pulls: Iterable[MainDashboardEntry],
       usageStats: ApiUsageStats
-  )
+  ) {
+    def filterRepos(keep: Set[String]): MainDashboardData =
+      copy(pulls = pulls.filter(entry => keep.exists(r => entry.isRepo(r))))
+  }
 
   case class MainDashboardEntry(
       repo: Repo,
@@ -64,7 +69,9 @@ object Dashboard {
       status: PrValidationStatus,
       reviewedOk: Int,
       reviewedReject: Int
-  )
+  ) {
+    def isRepo(name: String) = repo.denotes(name)
+  }
 
   // Personal dashboard
   case class GetPersonalDashboard(person: String)

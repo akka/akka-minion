@@ -12,6 +12,7 @@ import scala.util.control.NonFatal
 import scala.concurrent.duration._
 import scala.collection.immutable.Seq
 import scala.concurrent.Await
+import scala.collection.JavaConverters._
 
 object App {
 
@@ -25,8 +26,12 @@ object App {
       apiCallPerHour: Int,
       teamMembers: Set[String],
       bots: Set[String],
-      repos: Set[String]
-  )
+      teamRepos: Map[String, Set[String]]
+  ) {
+    val repos: Set[String] = teamRepos.flatMap {
+      case (_, repos) => repos
+    }.toSet
+  }
 
   def props(settings: Settings): Props = Props(new App(settings))
 
@@ -35,27 +40,28 @@ object App {
 
     try {
 
-      val config = system.settings.config
-
-      def asList(cfg: ConfigList): Seq[String] = {
-        val itr = cfg.iterator()
-        var result = Vector.empty[String]
-        while (itr.hasNext) result :+= itr
-          .next()
-          .unwrapped()
-          .asInstanceOf[String]
-        result
+      val config = system.settings.config.getConfig("akka.minion")
+      val teamRepos: Map[String, Set[String]] = {
+        config
+          .getObjectList("team-repos")
+          .asScala
+          .map { configObject =>
+            val c = configObject.toConfig
+            val name = c.getString("team")
+            val repos = c.getStringList("repos").asScala.toSet
+            (name, repos)
+          }
+          .toMap
       }
 
       val settings = Settings(
-        httpPort = config.getInt("akka.minion.http-port"),
-        pollInterval =
-          Duration(config.getDuration("akka.minion.poll-interval", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS),
-        token = config.getString("akka.minion.api-key"),
-        apiCallPerHour = config.getInt("akka.minion.max-api-calls-per-hour"),
-        teamMembers = asList(config.getList("akka.minion.team-members")).toSet,
-        bots = asList(config.getList("akka.minion.bots")).toSet,
-        repos = asList(config.getList("akka.minion.repos")).toSet
+        httpPort = config.getInt("http-port"),
+        pollInterval = Duration(config.getDuration("poll-interval", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS),
+        token = config.getString("access-token"),
+        apiCallPerHour = config.getInt("max-api-calls-per-hour"),
+        teamMembers = config.getStringList("team-members").asScala.toSet,
+        bots = config.getStringList("bots").asScala.toSet,
+        teamRepos = teamRepos
       )
 
       system.actorOf(App.props(settings), "minion-supervisor")

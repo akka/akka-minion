@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
+import akka.minion.App.Settings
 import akka.minion.Dashboard._
 import akka.pattern.{ask, AskTimeoutException}
 import akka.stream.ActorMaterializer
@@ -46,13 +47,24 @@ class HttpServer(
     }
   } ~
   path("overview") {
-    get {
-      val reportFuture =
-        (dashboard ? GetMainDashboard)
-          .mapTo[MainDashboardReply]
-          .map(reply => Template(Template.mainDashboard(reply.report)))
+    parameters('team ?) { team =>
+      get {
+        val reportFuture =
+          (dashboard ? GetMainDashboard)
+            .mapTo[MainDashboardReply]
+            .map { reply =>
+              val report = team match {
+                case Some(teamName) =>
+                  val repos = settings.teamRepos.getOrElse(teamName, Set.empty)
+                  reply.report.map(_.filterRepos(repos))
+                case None =>
+                  reply.report
+              }
+              Template(Template.mainDashboard(report, settings))
+            }
 
-      complete(reportFuture)
+        complete(reportFuture)
+      }
     }
   } ~
   path("personal" / Segment) { person =>
@@ -129,7 +141,7 @@ object Template {
 
   }
 
-  def mainDashboard(data: Option[MainDashboardData]): TypedTag[String] =
+  def mainDashboard(data: Option[MainDashboardData], settings: Settings): TypedTag[String] =
     data match {
       case None => alert(p("No dashboard data is available"), "info")
       case Some(report) =>
@@ -137,6 +149,9 @@ object Template {
 
         div(
           h2(s"Report"),
+          div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
+            a(href := s"/overview?team=$team", s"$team ")
+          }),
           table(
             `class` := "table table-condensed",
             thead(

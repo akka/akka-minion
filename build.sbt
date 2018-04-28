@@ -1,12 +1,13 @@
 organization := "akka"
 name := "akka-minion"
 
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.6"
 scalacOptions ++= List(
   "-unchecked",
   "-deprecation",
   "-language:_",
-  "-encoding", "UTF-8"
+  "-encoding",
+  "UTF-8"
 )
 
 val AkkaVersion = "2.5.12"
@@ -19,7 +20,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka"  %% "akka-http-spray-json" % AkkaHttpVersion,
   "com.lihaoyi"        %% "scalatags"            % "0.6.7",
   "io.spray"           %% "spray-json"           % "1.3.4",
-  "com.github.blemale" %% "scaffeine"            % "2.4.0"
+  "com.github.blemale" %% "scaffeine"            % "2.5.0"
 )
 
 scalafmtOnCompile in ThisBuild := true

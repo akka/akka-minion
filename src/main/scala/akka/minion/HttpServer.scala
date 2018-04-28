@@ -37,7 +37,7 @@ class HttpServer(
   implicit val timeout = Timeout(3.seconds)
 
   private val route =
-  pathSingleSlash {
+  path("status") {
     get {
       val ghStatus = serviceStatus(githubService)
       val botStatus = serviceStatus(bot)
@@ -47,6 +47,9 @@ class HttpServer(
     }
   } ~
   path("overview") {
+    redirect("/", StatusCodes.PermanentRedirect)
+  } ~
+  pathSingleSlash {
     parameters('team ?) { team =>
       get {
         val reportFuture =
@@ -150,7 +153,7 @@ object Template {
         div(
           h2(s"Report"),
           div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
-            a(href := s"/overview?team=$team", s"$team ")
+            a(href := s"/?team=$team", s"$team ")
           }),
           table(
             `class` := "table table-condensed",
@@ -185,6 +188,9 @@ object Template {
           ),
           p(
             s"API call quota: ${report.usageStats.remaining}/${report.usageStats.limit}. Will reset ${report.usageStats.resetsIn}"
+          ),
+          p(
+            a(href := "https://github.com/akka/akka-minion", "Source code in GitHub")
           )
         )
     }

@@ -56,14 +56,19 @@ class HttpServer(
           (dashboard ? GetMainDashboard)
             .mapTo[MainDashboardReply]
             .map { reply =>
-              val report = team match {
-                case Some(teamName) =>
-                  val repos = settings.teamRepos.getOrElse(teamName, Set.empty)
-                  reply.report.map(_.filterRepos(repos))
+              reply.report match {
+                case Some(report) =>
+                  val filteredReport = team match {
+                    case Some(teamName) =>
+                      val repos = settings.teamRepos.getOrElse(teamName, Set.empty)
+                      report.filterRepos(repos)
+                    case None =>
+                      report
+                  }
+                  Template(Template.mainDashboard(filteredReport, settings))
                 case None =>
-                  reply.report
+                  Template(Template.noDataYet(settings), Template.refreshPage)
               }
-              Template(Template.mainDashboard(report, settings))
             }
 
         complete(reportFuture)
@@ -108,7 +113,9 @@ class HttpServer(
 object Template {
   import scalatags.Text.all._
 
-  def apply(content: TypedTag[String]): HttpEntity.Strict = {
+  val refreshPage: TypedTag[String] = meta(httpEquiv := "refresh", content := "5")
+
+  def apply(content: TypedTag[String], additionalHeaders: scalatags.Text.Modifier*): HttpEntity.Strict = {
     val tags = html(
       head(
         link(
@@ -133,7 +140,8 @@ object Template {
             |     vertical-align: middle;
             |}
           """.stripMargin)
-        )
+        ),
+        additionalHeaders
       ),
       body(
         div(`class` := "container", content)
@@ -144,56 +152,59 @@ object Template {
 
   }
 
-  def mainDashboard(data: Option[MainDashboardData], settings: Settings): TypedTag[String] =
-    data match {
-      case None => alert(p("No dashboard data is available"), "info")
-      case Some(report) =>
-        def repoUrl(name: String) = s"https://github.com/$name"
+  def noDataYet(settings: Settings): TypedTag[String] =
+    div(alert(p("No dashboard data available, yet."), "info"),
+        div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
+          a(href := s"/?team=$team", s"$team ")
+        }))
 
-        div(
-          h2(s"Report"),
-          div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
-            a(href := s"/?team=$team", s"$team ")
-          }),
-          table(
-            `class` := "table table-condensed",
-            thead(
-              tr(
-                th("Title"),
-                th("Last Updated"),
-                th("People"),
-                th("Last actor"),
-                th("M"),
-                th("S"),
-                th("R")
-              )
-            ),
-            tbody(
-              for (pull <- report.pulls.toSeq) yield {
-                tr(
-                  td(
-                    person(pull.author),
-                    a(href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
-                      s"${pull.repo.name}#${pull.number}: ${pull.title}")
-                  ),
-                  td(Style.noWrap, pull.lastUpdated),
-                  td(pull.people.map(involvment).toSeq),
-                  td(Style.noWrap, performance(pull.lastActor)),
-                  td(threeState(pull.mergeable)),
-                  td(validationStatus(pull.status)),
-                  td(reviewStatus(pull))
-                )
-              }
-            )
-          ),
-          p(
-            s"API call quota: ${report.usageStats.remaining}/${report.usageStats.limit}. Will reset ${report.usageStats.resetsIn}"
-          ),
-          p(
-            a(href := "https://github.com/akka/akka-minion", "Source code in GitHub")
+  def mainDashboard(report: MainDashboardData, settings: Settings): TypedTag[String] = {
+    def repoUrl(name: String) = s"https://github.com/$name"
+
+    div(
+      h2(s"Report"),
+      div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
+        a(href := s"/?team=$team", s"$team ")
+      }),
+      table(
+        `class` := "table table-condensed",
+        thead(
+          tr(
+            th("Title"),
+            th("Last Updated"),
+            th("People"),
+            th("Last actor"),
+            th("M"),
+            th("S"),
+            th("R")
           )
+        ),
+        tbody(
+          for (pull <- report.pulls.toSeq) yield {
+            tr(
+              td(
+                person(pull.author),
+                a(href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
+                  s"${pull.repo.name}#${pull.number}: ${pull.title}")
+              ),
+              td(Style.noWrap, pull.lastUpdated),
+              td(pull.people.map(involvment).toSeq),
+              td(Style.noWrap, performance(pull.lastActor)),
+              td(threeState(pull.mergeable)),
+              td(validationStatus(pull.status)),
+              td(reviewStatus(pull))
+            )
+          }
         )
-    }
+      ),
+      p(
+        s"API call quota: ${report.usageStats.remaining}/${report.usageStats.limit}. Will reset ${report.usageStats.resetsIn}"
+      ),
+      p(
+        a(href := "https://github.com/akka/akka-minion", "Source code in GitHub")
+      )
+    )
+  }
 
   def personalDashboard(data: Option[PersonalDashboard]): TypedTag[String] =
     data match {

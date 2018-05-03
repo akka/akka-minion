@@ -185,6 +185,7 @@ object Template {
               td(
                 person(pull.author),
                 a(href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
+                  target := "_blank",
                   s"${pull.repo.name}#${pull.number}: ${pull.title}")
               ),
               td(Style.noWrap, pull.lastUpdated),
@@ -234,6 +235,7 @@ object Template {
                 tr(
                   td(
                     a(href := s"${repoUrl(entry.repo.fullName)}/pull/${entry.pr.number}",
+                      target := "_blank",
                       s"${entry.pr.number}: ${entry.pr.title}")
                   ),
                   td(renderAction(entry.action))
@@ -280,12 +282,14 @@ object Template {
     }): _*)
 
   def person(p: Person, styles: Cls*): TypedTag[String] =
-    img(
-      Style.avatar,
-      styles,
-      src := p.avatarUrl,
-      title := p.login
-    )
+    a(href := s"https://github.com/${p.login}",
+      target := "_blank",
+      img(
+        Style.avatar,
+        styles,
+        src := p.avatarUrl,
+        title := p.login
+      ))
 
   def performance(perf: Performance): Seq[TypedTag[String]] = {
     val (icon, titleText) = perf.action match {

@@ -4,7 +4,14 @@ import java.time.{Duration, ZonedDateTime}
 
 import akka.actor.{Actor, ActorLogging, Props}
 import akka.minion.App.Settings
-import akka.minion.GithubService.{CommitStatusConstants, FullReport, IssueComment, PullRequest, PullRequestReview}
+import akka.minion.GithubService.{
+  CommitStatusConstants,
+  FullReport,
+  IssueComment,
+  Label,
+  PullRequest,
+  PullRequestReview
+}
 
 import scala.collection.immutable.Seq
 
@@ -62,6 +69,7 @@ object Dashboard {
       author: Person,
       number: Int,
       title: String,
+      labels: List[Label],
       lastUpdated: String,
       people: Set[Performance],
       lastActor: Performance,
@@ -191,6 +199,7 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
                 author = Person(pull.user.login, pull.user.avatar_url),
                 number = pull.number,
                 title = pull.title,
+                labels = pull.labels,
                 lastUpdated = pull.updated_at.fold("long time ago...")(_.prettyAgo),
                 people = involvedPeople,
                 lastActor = lastPerformance,

@@ -93,6 +93,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
                          title: String,
                          body: Option[String],
                          assignee: Option[User],
+                         labels: List[Label],
                          created_at: Option[ZonedDateTime],
                          updated_at: Option[ZonedDateTime],
                          closed_at: Option[ZonedDateTime],
@@ -209,7 +210,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
 
   implicit lazy val _fmtGitRef: RJF[GitRef] = jsonFormat5(GitRef)
 
-  implicit lazy val _fmtPullRequest: RJF[PullRequest] = jsonFormat15(PullRequest)
+  implicit lazy val _fmtPullRequest: RJF[PullRequest] = jsonFormat16(PullRequest)
 
   implicit lazy val _fmtLabel: RJF[Label] = jsonFormat3(Label)
   implicit lazy val _fmtMilestone: RJF[Milestone] = jsonFormat9(Milestone.apply)

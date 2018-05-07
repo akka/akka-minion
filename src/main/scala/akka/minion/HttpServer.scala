@@ -170,6 +170,7 @@ object Template {
         `class` := "table table-condensed",
         thead(
           tr(
+            th(""),
             th("Title"),
             th("Last Updated"),
             th("People"),
@@ -182,11 +183,17 @@ object Template {
         tbody(
           for (pull <- report.pulls.toSeq) yield {
             tr(
+              td(person(pull.author)),
               td(
-                person(pull.author),
                 a(href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
                   target := "_blank",
-                  s"${pull.repo.name}#${pull.number}: ${pull.title}")
+                  s"${pull.repo.name}#${pull.number}: ${pull.title}"),
+                for (label <- pull.labels) yield {
+                  span(Style.issueLabel,
+                       backgroundColor := label.color.getOrElse("#111111"),
+                       color := "#FFFFFF",
+                       label.name)
+                }
               ),
               td(Style.noWrap, pull.lastUpdated),
               td(pull.people.map(involvment).toSeq),
@@ -374,6 +381,16 @@ object Style extends CascadingStyleSheet {
 
   val noWrap = cls(
     whiteSpace := "nowrap"
+  )
+
+  val issueLabel = cls(
+    height := "20px",
+    padding := "0.15em 4px",
+    fontSize := "12px",
+    fontWeight := "600",
+    lineHeight := "15px",
+    borderRadius := "2px",
+    boxShadow := "inset 0 -1px 0 rgba(27,31,35,0.12)"
   )
 
   val empty = cls()

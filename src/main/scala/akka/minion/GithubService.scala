@@ -85,7 +85,7 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
                         pushed_at: Option[ZonedDateTime]) { // owner: Either[User, Author]
     override def toString = full_name
   }
-  case class GitRef(sha: String, label: String, ref: String, repo: Repository, user: User) {
+  case class GitRef(sha: String, label: String, ref: String, repo: Option[Repository], user: User) {
     override def toString = s"${repo}#${sha.take(7)}"
   }
   case class PullRequest(number: Int,
@@ -258,6 +258,8 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
   import GithubService._
   import context.dispatcher
 
+  final val GitHubUrl = "api.github.com"
+
   private implicit val mat = ActorMaterializer()
 
   private val timer = context.system.scheduler.schedule(1.second, settings.pollInterval, self, Refresh)
@@ -271,7 +273,7 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
     Source
       .queue[(HttpRequest, Promise[HttpResponse])](512, OverflowStrategy.backpressure)
       .throttle(settings.apiCallPerHour, 1.hour, 300, ThrottleMode.shaping)
-      .via(Http(context.system).cachedHostConnectionPoolHttps("api.github.com"))
+      .via(Http(context.system).cachedHostConnectionPoolHttps(GitHubUrl))
       .toMat(Sink.foreach {
         case (response, promise) =>
           promise.tryComplete(response)
@@ -313,7 +315,10 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
               .header[ETag]
               .fold(())(e => responseCache.put(req.uri, (e.etag, r)))
         }
-        resp
+        resp.transform(
+          identity,
+          ex => new Error(s"Failure while deserializing response from $GitHubUrl${req.uri}", ex)
+        )
       case response => Unmarshal(response.entity).to[T]
     }
   }

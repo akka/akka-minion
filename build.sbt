@@ -11,7 +11,7 @@ scalacOptions ++= List(
 )
 
 val AkkaVersion = "2.5.17"
-val AkkaHttpVersion = "10.1.1"
+val AkkaHttpVersion = "10.1.5"
 
 libraryDependencies ++= Seq(
   "com.typesafe.akka"  %% "akka-actor"           % AkkaVersion,

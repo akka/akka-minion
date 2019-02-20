@@ -1,3 +1,11 @@
+## Overview
+
+Minion provides an overview of active pull requests (PRs) across multiple repositories. This can be helpful for teams that maintain several repositories as part of their day-to-day work, such as the Akka team.
+
+Minion also shows what the last action was on a PR, which can be very useful info to have at a glance in some situations.
+
+This application is currently deployed to [https://akka-minion.herokuapp.com/?team=akka](https://akka-minion.herokuapp.com/?team=akka).
+
 ## Developing
 
 Get your access token [from GitHub](https://github.com/settings/tokens) with a `public_repo` scope.

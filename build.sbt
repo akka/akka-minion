@@ -20,7 +20,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka"  %% "akka-http-spray-json" % AkkaHttpVersion,
   "com.lihaoyi"        %% "scalatags"            % "0.7.0",
   "io.spray"           %% "spray-json"           % "1.3.5",
-  "com.github.blemale" %% "scaffeine"            % "3.0.0"
+  "com.github.blemale" %% "scaffeine"            % "3.1.0"
 )
 
 scalafmtOnCompile in ThisBuild := true

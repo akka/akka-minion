@@ -1,7 +1,7 @@
 organization := "akka"
 name := "akka-minion"
 
-scalaVersion := "2.12.6"
+scalaVersion := "2.12.9"
 scalacOptions ++= List(
   "-unchecked",
   "-deprecation",
@@ -23,6 +23,6 @@ libraryDependencies ++= Seq(
   "com.github.blemale" %% "scaffeine"            % "3.1.0"
 )
 
-scalafmtOnCompile in ThisBuild := true
+scalafmtOnCompile := true
 
 enablePlugins(JavaAppPackaging)

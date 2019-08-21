@@ -37,54 +37,54 @@ class HttpServer(
   implicit val timeout = Timeout(3.seconds)
 
   private val route =
-  path("status") {
-    get {
-      val ghStatus = serviceStatus(githubService)
-      val botStatus = serviceStatus(bot)
-      val dashboardStatus = serviceStatus(dashboard)
+    path("status") {
+      get {
+        val ghStatus = serviceStatus(githubService)
+        val botStatus = serviceStatus(bot)
+        val dashboardStatus = serviceStatus(dashboard)
 
-      complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
-    }
-  } ~
-  path("overview") {
-    redirect("/", StatusCodes.PermanentRedirect)
-  } ~
-  pathSingleSlash {
-    parameters('team ?) { team =>
+        complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
+      }
+    } ~
+    path("overview") {
+      redirect("/", StatusCodes.PermanentRedirect)
+    } ~
+    pathSingleSlash {
+      parameters('team ?) { team =>
+        get {
+          val reportFuture =
+            (dashboard ? GetMainDashboard)
+              .mapTo[MainDashboardReply]
+              .map { reply =>
+                reply.report match {
+                  case Some(report) =>
+                    val filteredReport = team match {
+                      case Some(teamName) =>
+                        val repos = settings.teamRepos.getOrElse(teamName, Set.empty)
+                        report.filterRepos(repos)
+                      case None =>
+                        report
+                    }
+                    Template(Template.mainDashboard(filteredReport, settings))
+                  case None =>
+                    Template(Template.noDataYet(settings), Template.refreshPage)
+                }
+              }
+
+          complete(reportFuture)
+        }
+      }
+    } ~
+    path("personal" / Segment) { person =>
       get {
         val reportFuture =
-          (dashboard ? GetMainDashboard)
-            .mapTo[MainDashboardReply]
-            .map { reply =>
-              reply.report match {
-                case Some(report) =>
-                  val filteredReport = team match {
-                    case Some(teamName) =>
-                      val repos = settings.teamRepos.getOrElse(teamName, Set.empty)
-                      report.filterRepos(repos)
-                    case None =>
-                      report
-                  }
-                  Template(Template.mainDashboard(filteredReport, settings))
-                case None =>
-                  Template(Template.noDataYet(settings), Template.refreshPage)
-              }
-            }
+          (dashboard ? GetPersonalDashboard(person))
+            .mapTo[PersonalDashboardReply]
+            .map(reply => Template(Template.personalDashboard(reply.report)))
 
         complete(reportFuture)
       }
     }
-  } ~
-  path("personal" / Segment) { person =>
-    get {
-      val reportFuture =
-        (dashboard ? GetPersonalDashboard(person))
-          .mapTo[PersonalDashboardReply]
-          .map(reply => Template(Template.personalDashboard(reply.report)))
-
-      complete(reportFuture)
-    }
-  }
 
   def serviceStatus(service: ActorRef): Future[String] =
     (service ? App.ServicePing)
@@ -156,10 +156,12 @@ object Template {
   }
 
   def noDataYet(settings: Settings): TypedTag[String] =
-    div(alert(p("No dashboard data available, yet."), "info"),
-        div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
-          a(href := s"/?team=$team", s"$team ")
-        }))
+    div(
+      alert(p("No dashboard data available, yet."), "info"),
+      div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
+        a(href := s"/?team=$team", s"$team ")
+      })
+    )
 
   def mainDashboard(report: MainDashboardData, settings: Settings): TypedTag[String] = {
     def repoUrl(name: String) = s"https://github.com/$name"
@@ -188,14 +190,18 @@ object Template {
             tr(
               td(person(pull.author)),
               td(
-                a(href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
+                a(
+                  href := s"${repoUrl(pull.repo.fullName)}/pull/${pull.number}",
                   target := "_blank",
-                  s"${pull.repo.name}#${pull.number}: ${pull.title}"),
+                  s"${pull.repo.name}#${pull.number}: ${pull.title}"
+                ),
                 for (label <- pull.labels) yield {
-                  span(Style.issueLabel,
-                       backgroundColor := label.color.getOrElse("#111111"),
-                       color := "#FFFFFF",
-                       label.name)
+                  span(
+                    Style.issueLabel,
+                    backgroundColor := label.color.getOrElse("#111111"),
+                    color := "#FFFFFF",
+                    label.name
+                  )
                 }
               ),
               td(Style.noWrap, pull.lastUpdated),
@@ -244,9 +250,11 @@ object Template {
               for (entry <- data.toSeq if entry.action != NoAction) yield {
                 tr(
                   td(
-                    a(href := s"${repoUrl(entry.repo.fullName)}/pull/${entry.pr.number}",
+                    a(
+                      href := s"${repoUrl(entry.repo.fullName)}/pull/${entry.pr.number}",
                       target := "_blank",
-                      s"${entry.pr.number}: ${entry.pr.title}")
+                      s"${entry.pr.number}: ${entry.pr.title}"
+                    )
                   ),
                   td(renderAction(entry.action))
                 )
@@ -292,14 +300,16 @@ object Template {
     }): _*)
 
   def person(p: Person, styles: Cls*): TypedTag[String] =
-    a(href := s"https://github.com/${p.login}",
+    a(
+      href := s"https://github.com/${p.login}",
       target := "_blank",
       img(
         Style.avatar,
         styles,
         src := p.avatarUrl,
         title := p.login
-      ))
+      )
+    )
 
   def performance(perf: Performance): Seq[TypedTag[String]] = {
     val (icon, titleText) = perf.action match {

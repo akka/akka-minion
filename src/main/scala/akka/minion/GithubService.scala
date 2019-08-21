@@ -77,33 +77,37 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   case class Author(name: String, email: String) { // , username: Option[String]
     override def toString = name
   }
-  case class Repository(name: String,
-                        full_name: String,
-                        git_url: String,
-                        updated_at: Option[ZonedDateTime],
-                        created_at: Option[ZonedDateTime],
-                        pushed_at: Option[ZonedDateTime]) { // owner: Either[User, Author]
+  case class Repository(
+      name: String,
+      full_name: String,
+      git_url: String,
+      updated_at: Option[ZonedDateTime],
+      created_at: Option[ZonedDateTime],
+      pushed_at: Option[ZonedDateTime]
+  ) { // owner: Either[User, Author]
     override def toString = full_name
   }
   case class GitRef(sha: String, label: String, ref: String, repo: Option[Repository], user: User) {
     override def toString = s"${repo}#${sha.take(7)}"
   }
-  case class PullRequest(number: Int,
-                         state: String,
-                         title: String,
-                         body: Option[String],
-                         assignee: Option[User],
-                         labels: List[Label],
-                         created_at: Option[ZonedDateTime],
-                         updated_at: Option[ZonedDateTime],
-                         closed_at: Option[ZonedDateTime],
-                         merged_at: Option[ZonedDateTime],
-                         head: GitRef,
-                         base: GitRef,
-                         user: User,
-                         merged: Option[Boolean],
-                         mergeable: Option[Boolean],
-                         merged_by: Option[User]) {
+  case class PullRequest(
+      number: Int,
+      state: String,
+      title: String,
+      body: Option[String],
+      assignee: Option[User],
+      labels: List[Label],
+      created_at: Option[ZonedDateTime],
+      updated_at: Option[ZonedDateTime],
+      closed_at: Option[ZonedDateTime],
+      merged_at: Option[ZonedDateTime],
+      head: GitRef,
+      base: GitRef,
+      user: User,
+      merged: Option[Boolean],
+      mergeable: Option[Boolean],
+      merged_by: Option[User]
+  ) {
     override def toString = s"${base.repo}#$number"
   }
 
@@ -114,15 +118,17 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   object Milestone {
     private val MergeBranch = """Merge to (\S+)\b""".r.unanchored
   }
-  case class Milestone(number: Int,
-                       state: String,
-                       title: String,
-                       description: Option[String],
-                       creator: User,
-                       created_at: Option[ZonedDateTime],
-                       updated_at: Option[ZonedDateTime],
-                       closed_at: Option[ZonedDateTime],
-                       due_on: Option[ZonedDateTime]) {
+  case class Milestone(
+      number: Int,
+      state: String,
+      title: String,
+      description: Option[String],
+      creator: User,
+      created_at: Option[ZonedDateTime],
+      updated_at: Option[ZonedDateTime],
+      closed_at: Option[ZonedDateTime],
+      due_on: Option[ZonedDateTime]
+  ) {
     override def toString = s"Milestone $title ($state)"
 
     def mergeBranch = description match {
@@ -131,57 +137,69 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     }
   }
 
-  case class Issue(number: Int,
-                   state: String,
-                   title: String,
-                   body: Option[String],
-                   user: User,
-                   labels: List[Label],
-                   assignee: Option[User],
-                   milestone: Option[Milestone],
-                   created_at: Option[ZonedDateTime],
-                   updated_at: Option[ZonedDateTime],
-                   closed_at: Option[ZonedDateTime]) {
+  case class Issue(
+      number: Int,
+      state: String,
+      title: String,
+      body: Option[String],
+      user: User,
+      labels: List[Label],
+      assignee: Option[User],
+      milestone: Option[Milestone],
+      created_at: Option[ZonedDateTime],
+      updated_at: Option[ZonedDateTime],
+      closed_at: Option[ZonedDateTime]
+  ) {
     override def toString = s"Issue #$number"
   }
 
-  case class CommitInfo(id: Option[String],
-                        message: String,
-                        timestamp: Option[ZonedDateTime],
-                        author: Author,
-                        committer: Author)
+  case class CommitInfo(
+      id: Option[String],
+      message: String,
+      timestamp: Option[ZonedDateTime],
+      author: Author,
+      committer: Author
+  )
   // added: Option[List[String]], removed: Option[List[String]], modified: Option[List[String]]
   case class Commit(sha: String, commit: CommitInfo, url: Option[String] = None)
 
   case class CombiCommitStatus(state: String, sha: String, statuses: List[CommitStatus], total_count: Int)
 
-  case class CommitStatus(state: String,
-                          context: Option[String] = None,
-                          description: Option[String] = None,
-                          target_url: Option[String] = None)
+  case class CommitStatus(
+      state: String,
+      context: Option[String] = None,
+      description: Option[String] = None,
+      target_url: Option[String] = None
+  )
 
-  case class IssueComment(body: String,
-                          user: Option[User] = None,
-                          created_at: Option[ZonedDateTime],
-                          updated_at: Option[ZonedDateTime],
-                          id: Option[Long] = None)
+  case class IssueComment(
+      body: String,
+      user: Option[User] = None,
+      created_at: Option[ZonedDateTime],
+      updated_at: Option[ZonedDateTime],
+      id: Option[Long] = None
+  )
 
-  case class PullRequestComment(body: String,
-                                user: Option[User] = None,
-                                commit_id: Option[String] = None,
-                                path: Option[String] = None,
-                                position: Option[Int] = None,
-                                created_at: Option[ZonedDateTime],
-                                updated_at: Option[ZonedDateTime],
-                                id: Option[Long] = None)
+  case class PullRequestComment(
+      body: String,
+      user: Option[User] = None,
+      commit_id: Option[String] = None,
+      path: Option[String] = None,
+      position: Option[Int] = None,
+      created_at: Option[ZonedDateTime],
+      updated_at: Option[ZonedDateTime],
+      id: Option[Long] = None
+  )
 
   case class PullRequestEvent(action: String, number: Int, pull_request: PullRequest)
   case class PushEvent(ref: String, commits: List[CommitInfo], repository: Repository)
 
-  case class PullRequestReviewCommentEvent(action: String,
-                                           pull_request: PullRequest,
-                                           comment: PullRequestComment,
-                                           repository: Repository)
+  case class PullRequestReviewCommentEvent(
+      action: String,
+      pull_request: PullRequest,
+      comment: PullRequestComment,
+      repository: Repository
+  )
   case class IssueCommentEvent(action: String, issue: Issue, comment: IssueComment, repository: Repository)
 
   object ReviewStatusConstants {
@@ -384,14 +402,13 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
       pullStatus <- pullStatusFuture
       pullReviews <- pullReviewsFuture
       usageStats <- usageStatsFuture
-    } yield
-      FullReport(
-        Map(repo -> pulls),
-        pullComments,
-        pullStatus,
-        pullReviews,
-        usageStats
-      )
+    } yield FullReport(
+      Map(repo -> pulls),
+      pullComments,
+      pullStatus,
+      pullReviews,
+      usageStats
+    )
 
   }
 

@@ -218,10 +218,14 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
       .toSeq
       .sortBy(_.lastActor.performedAt)(Ordering.fromLessThan(_ isBefore _))
 
-    MainDashboardData(entries,
-                      ApiUsageStats(report.usageStats.rate.limit,
-                                    report.usageStats.rate.remaining,
-                                    report.usageStats.rate.reset.prettyIn))
+    MainDashboardData(
+      entries,
+      ApiUsageStats(
+        report.usageStats.rate.limit,
+        report.usageStats.rate.remaining,
+        report.usageStats.rate.reset.prettyIn
+      )
+    )
   }
 
   private def createPersonalDashboard(person: String, report: FullReport): PersonalDashboard = {

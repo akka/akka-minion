@@ -50,7 +50,6 @@ trait ZuluDateTimeMarshalling {
 }
 
 object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
-
   case object Refresh
   case class ClientFailed(ex: Throwable)
 
@@ -269,7 +268,6 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
       reviews: Map[PullRequest, Seq[PullRequestReview]],
       usageStats: UsageStats
   )
-
 }
 
 class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor with ActorLogging {
@@ -409,7 +407,6 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
       pullReviews,
       usageStats
     )
-
   }
 
   private def refresh(): Unit = {

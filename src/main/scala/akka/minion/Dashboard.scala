@@ -16,7 +16,6 @@ import akka.minion.GithubService.{
 import scala.collection.immutable.Seq
 
 object Dashboard {
-
   def props(settings: Settings): Props = Props(new Dashboard(settings))
 
   // Main dashboard
@@ -279,7 +278,5 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
       teamActions,
       externalActions
     )
-
   }
-
 }

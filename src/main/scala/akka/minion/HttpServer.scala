@@ -16,10 +16,8 @@ import scalatags.Text.TypedTag
 import scalatags.stylesheet.{CascadingStyleSheet, Cls}
 
 object HttpServer {
-
   def props(settings: App.Settings, ghService: ActorRef, bot: ActorRef, dashboard: ActorRef): Props =
     Props(new HttpServer(settings, ghService, bot, dashboard))
-
 }
 
 class HttpServer(
@@ -152,7 +150,6 @@ object Template {
     )
 
     HttpEntity(ContentTypes.`text/html(UTF-8)`, tags.render)
-
   }
 
   def noDataYet(settings: Settings): TypedTag[String] =
@@ -407,5 +404,4 @@ object Style extends CascadingStyleSheet {
   )
 
   val empty = cls()
-
 }

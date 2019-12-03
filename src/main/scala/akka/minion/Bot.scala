@@ -5,13 +5,10 @@ import akka.minion.App.Settings
 import akka.minion.GithubService.FullReport
 
 object Bot {
-
   def props(settings: Settings): Props = Props(new Bot(settings))
-
 }
 
 class Bot(settingts: Settings) extends Actor with ActorLogging {
-
   override def preStart(): Unit =
     log.info("Minion bot started")
 

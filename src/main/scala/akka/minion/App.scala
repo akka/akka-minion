@@ -15,7 +15,6 @@ import scala.concurrent.Await
 import scala.collection.JavaConverters._
 
 object App {
-
   case object ServicePing
   case object ServicePong
 
@@ -39,7 +38,6 @@ object App {
     val system = ActorSystem("akka-minion")
 
     try {
-
       val config = system.settings.config.getConfig("akka.minion")
       val teamRepos: Map[String, Set[String]] = {
         config
@@ -75,11 +73,9 @@ object App {
       system.terminate()
     }
   }
-
 }
 
 class App(settings: App.Settings) extends Actor {
-
   override def supervisorStrategy: SupervisorStrategy =
     OneForOneStrategy(maxNrOfRetries = 10, 3.seconds) {
       case _: ConfigurationException => Stop

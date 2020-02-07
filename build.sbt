@@ -10,7 +10,7 @@ scalacOptions ++= List(
   "UTF-8"
 )
 
-val AkkaVersion = "2.6.0"
+val AkkaVersion = "2.6.3"
 val AkkaHttpVersion = "10.1.11"
 
 libraryDependencies ++= Seq(
@@ -18,7 +18,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka"  %% "akka-stream"          % AkkaVersion,
   "com.typesafe.akka"  %% "akka-http"            % AkkaHttpVersion,
   "com.typesafe.akka"  %% "akka-http-spray-json" % AkkaHttpVersion,
-  "com.lihaoyi"        %% "scalatags"            % "0.7.0",
+  "com.lihaoyi"        %% "scalatags"            % "0.8.5",
   "io.spray"           %% "spray-json"           % "1.3.5",
   "com.github.blemale" %% "scaffeine"            % "3.1.0"
 )

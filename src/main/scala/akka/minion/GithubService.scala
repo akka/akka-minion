@@ -338,7 +338,7 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
       case response =>
         Future.failed(
           new Error(
-            s"Request to github service failed: got status code [${response.status}] and body [${Unmarshal(response.entity)
+            s"Request to github service [${req.uri}] failed: got status code [${response.status}] and body [${Unmarshal(response.entity)
               .to[String]}]"
           )
         )

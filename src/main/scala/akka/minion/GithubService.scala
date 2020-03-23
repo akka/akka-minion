@@ -43,10 +43,10 @@ trait ZuluDateTimeMarshalling {
     date.toString
 
   private def parseIsoDateString(date: String): Option[ZonedDateTime] =
-    Try { Instant.parse(date).atZone(ZoneOffset.UTC) }.toOption
+    Try(Instant.parse(date).atZone(ZoneOffset.UTC)).toOption
 
   private def parseEpochSeconds(date: BigDecimal): Option[ZonedDateTime] =
-    Try { Instant.ofEpochSecond(date.toLong).atZone(ZoneOffset.UTC) }.toOption
+    Try(Instant.ofEpochSecond(date.toLong).atZone(ZoneOffset.UTC)).toOption
 }
 
 object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
@@ -335,7 +335,13 @@ class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor 
           identity,
           ex => new Error(s"Failure while deserializing response from $GitHubUrl${req.uri}", ex)
         )
-      case response => Unmarshal(response.entity).to[T]
+      case response =>
+        Future.failed(
+          new Error(
+            s"Request to github service failed: got status code [${response.status}] and body [${Unmarshal(response.entity)
+              .to[String]}]"
+          )
+        )
     }
   }
 

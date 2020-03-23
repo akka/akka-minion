@@ -244,9 +244,7 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
         case (repo, pulls) =>
           val (ownPrs, rest) = pulls.partition(_.user.login == person)
 
-          val (teamPrs, externalPrs) = rest.partition { pr =>
-            settings.teamMembers(pr.user.login)
-          }
+          val (teamPrs, externalPrs) = rest.partition(pr => settings.teamMembers(pr.user.login))
 
           val ownEntries = ownPrs.map { pr =>
             val action =
@@ -268,9 +266,7 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
 
           (ownEntries, teamEntries, externalEntries)
       }
-      .reduce { (report1, report2) =>
-        (report1._1 ++ report2._1, report1._2 ++ report1._2, report1._3 ++ report2._3)
-      }
+      .reduce((report1, report2) => (report1._1 ++ report2._1, report1._2 ++ report1._2, report1._3 ++ report2._3))
 
     PersonalDashboard(
       person,

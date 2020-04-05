@@ -5,14 +5,11 @@ import java.util.concurrent.TimeUnit
 import akka.ConfigurationException
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorSystem, OneForOneStrategy, Props, SupervisorStrategy}
-import com.typesafe.config.ConfigList
 
-import scala.io.StdIn
-import scala.util.control.NonFatal
-import scala.concurrent.duration._
-import scala.collection.immutable.Seq
 import scala.concurrent.Await
-import scala.collection.JavaConverters._
+import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 object App {
   case object ServicePing

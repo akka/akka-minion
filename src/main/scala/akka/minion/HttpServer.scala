@@ -7,7 +7,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.minion.App.Settings
 import akka.minion.Dashboard._
 import akka.pattern.{ask, AskTimeoutException}
-import akka.stream.ActorMaterializer
+import akka.stream.{Materializer, SystemMaterializer}
 import akka.util.Timeout
 
 import scala.concurrent.Future
@@ -29,7 +29,7 @@ class HttpServer(
     with ActorLogging {
   import context.dispatcher
 
-  private implicit val materializer = ActorMaterializer()
+  private implicit val materializer: Materializer = SystemMaterializer(context.system).materializer
   private var bindingFuture: Future[Http.ServerBinding] = _
 
   implicit val timeout = Timeout(3.seconds)
@@ -48,7 +48,7 @@ class HttpServer(
       redirect("/", StatusCodes.PermanentRedirect)
     } ~
     pathSingleSlash {
-      parameters('team ?) { team =>
+      parameters(Symbol("team") ?) { team =>
         get {
           val reportFuture =
             (dashboard ? GetMainDashboard)

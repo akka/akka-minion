@@ -18,12 +18,12 @@ import scala.concurrent.duration._
 trait GithubCaller {
 
   implicit def system: ActorSystem
-  implicit val ec: ExecutionContext = system.dispatcher
+  implicit lazy val ec: ExecutionContext = system.dispatcher
   def GitHubUrl: String
   def settings: Settings
 
   // Throttled global connection pool
-  val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
+  lazy val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
     Source
       .queue[(HttpRequest, Promise[HttpResponse])](512, OverflowStrategy.backpressure)
       .throttle(settings.apiCallPerHour, 1.hour, 300, ThrottleMode.shaping)

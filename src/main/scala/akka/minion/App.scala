@@ -22,7 +22,8 @@ object App {
       apiCallPerHour: Int,
       teamMembers: Set[String],
       bots: Set[String],
-      teamRepos: Map[String, Set[String]]
+      teamRepos: Map[String, Set[String]],
+      statsRepos: List[String]
   ) {
     val repos: Set[String] = teamRepos.flatMap {
       case (_, repos) => repos
@@ -32,7 +33,7 @@ object App {
   def props(settings: Settings): Props = Props(new App(settings))
 
   def main(args: Array[String]): Unit = {
-    val system = ActorSystem("akka-minion")
+    implicit val system = ActorSystem("akka-minion")
 
     try {
       val config = system.settings.config.getConfig("akka.minion")
@@ -56,12 +57,14 @@ object App {
         apiCallPerHour = config.getInt("max-api-calls-per-hour"),
         teamMembers = config.getStringList("team-members").asScala.toSet,
         bots = config.getStringList("bots").asScala.toSet,
-        teamRepos = teamRepos
+        teamRepos = teamRepos,
+        statsRepos = config.getStringList("stats-repos").asScala.toList
       )
 
       system.actorOf(App.props(settings), "minion-supervisor")
-
       Await.result(system.whenTerminated, Duration.Inf)
+
+//      new Graphql(settings).call()
     } catch {
       case e: Throwable =>
         println("Minion lost.")

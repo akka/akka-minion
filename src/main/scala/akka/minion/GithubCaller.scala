@@ -3,8 +3,17 @@ package akka.minion
 import akka.Done
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.HttpMethods.GET
-import akka.http.scaladsl.model.{headers, HttpRequest, HttpResponse, MediaRange, ResponseEntity, StatusCodes, Uri}
+import akka.http.scaladsl.model.HttpMethods._
+import akka.http.scaladsl.model.{
+  headers,
+  ContentTypes,
+  HttpRequest,
+  HttpResponse,
+  MediaRange,
+  ResponseEntity,
+  StatusCodes,
+  Uri
+}
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.minion.App.Settings
 import akka.stream.{OverflowStrategy, ThrottleMode}
@@ -89,5 +98,15 @@ trait GithubCaller {
     val req = HttpRequest(GET, uri = s"$base$repo$apiPath")
     throttledJson[T](req)
   }
+
+  protected def graphql[T: RootJsonFormat](entity: String)(
+      implicit um: Unmarshaller[ResponseEntity, T]
+  ): Future[T] = {
+    val q = s"""{ "query": "${encodeQuery(entity)}" }"""
+    val req = HttpRequest(POST, uri = "/graphql").withEntity(ContentTypes.`application/json`, q)
+    throttledJson[T](req)
+  }
+
+  private def encodeQuery(entity: String) = entity.replaceAll("\"", "\\\\\"").replaceAll("\n", "")
 
 }

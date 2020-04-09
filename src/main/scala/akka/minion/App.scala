@@ -5,14 +5,11 @@ import java.util.concurrent.TimeUnit
 import akka.ConfigurationException
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorSystem, OneForOneStrategy, Props, SupervisorStrategy}
-import com.typesafe.config.ConfigList
 
-import scala.io.StdIn
-import scala.util.control.NonFatal
-import scala.concurrent.duration._
-import scala.collection.immutable.Seq
 import scala.concurrent.Await
-import scala.collection.JavaConverters._
+import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 object App {
   case object ServicePing
@@ -25,7 +22,8 @@ object App {
       apiCallPerHour: Int,
       teamMembers: Set[String],
       bots: Set[String],
-      teamRepos: Map[String, Set[String]]
+      teamRepos: Map[String, Set[String]],
+      statsRepos: List[String]
   ) {
     val repos: Set[String] = teamRepos.flatMap {
       case (_, repos) => repos
@@ -35,7 +33,7 @@ object App {
   def props(settings: Settings): Props = Props(new App(settings))
 
   def main(args: Array[String]): Unit = {
-    val system = ActorSystem("akka-minion")
+    implicit val system = ActorSystem("akka-minion")
 
     try {
       val config = system.settings.config.getConfig("akka.minion")
@@ -59,12 +57,14 @@ object App {
         apiCallPerHour = config.getInt("max-api-calls-per-hour"),
         teamMembers = config.getStringList("team-members").asScala.toSet,
         bots = config.getStringList("bots").asScala.toSet,
-        teamRepos = teamRepos
+        teamRepos = teamRepos,
+        statsRepos = config.getStringList("stats-repos").asScala.toList
       )
 
       system.actorOf(App.props(settings), "minion-supervisor")
-
       Await.result(system.whenTerminated, Duration.Inf)
+
+//      new Graphql(settings).call()
     } catch {
       case e: Throwable =>
         println("Minion lost.")

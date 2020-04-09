@@ -2,26 +2,15 @@ package akka.minion
 
 import java.time.{Instant, ZoneOffset, ZonedDateTime}
 
-import akka.Done
 import akka.actor.Status.Failure
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.http.scaladsl.Http
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.HttpMethods._
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{`If-None-Match`, ETag, EntityTag, GenericHttpCredentials}
-import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.minion.App.Settings
-import akka.stream.scaladsl._
-import akka.stream.{ActorMaterializer, OverflowStrategy, ThrottleMode}
-import com.github.blemale.scaffeine.Scaffeine
 import spray.json._
 
-import scala.None
 import scala.collection.immutable.Seq
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{Future, Promise}
-import scala.util.Try
 
 trait ZuluDateTimeMarshalling {
   import scala.util.Try
@@ -270,84 +259,20 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   )
 }
 
-class GithubService(settings: Settings, listeners: Seq[ActorRef]) extends Actor with ActorLogging {
+class GithubService(val settings: Settings, listeners: Seq[ActorRef])
+    extends Actor
+    with GithubCaller
+    with ActorLogging {
   import GithubService._
-  import context.dispatcher
 
   final val GitHubUrl = "api.github.com"
+  val system: ActorSystem = context.system
 
-  private implicit val mat = ActorMaterializer()
-
-  private val timer = context.system.scheduler.schedule(1.second, settings.pollInterval, self, Refresh)
-
-  private val responseCache = Scaffeine()
-    .maximumSize(500)
-    .build[Uri, (EntityTag, Any)]()
-
-  // Throttled global connection pool
-  val (queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])], clientFuture: Future[Done]) =
-    Source
-      .queue[(HttpRequest, Promise[HttpResponse])](512, OverflowStrategy.backpressure)
-      .throttle(settings.apiCallPerHour, 1.hour, 300, ThrottleMode.shaping)
-      .via(Http(context.system).cachedHostConnectionPoolHttps(GitHubUrl))
-      .toMat(Sink.foreach {
-        case (response, promise) =>
-          promise.tryComplete(response)
-      })(Keep.both)
-      .run()
+  private val timer = context.system.scheduler.scheduleAtFixedRate(1.second, settings.pollInterval, self, Refresh)
 
   clientFuture.failed.foreach {
     case ex: Throwable =>
       self ! ClientFailed(ex)
-  }
-
-  private def throttledRequest(req: HttpRequest): Future[HttpResponse] = {
-    val promise = Promise[HttpResponse]
-
-    val request = req
-      .addHeader(headers.Authorization(GenericHttpCredentials("token", settings.token)))
-      .addHeader(headers.Accept(MediaRange.custom("application/vnd.github.black-cat-preview+json")))
-
-    queue.offer(request, promise).flatMap(_ => promise.future)
-  }
-
-  private def throttledJson[T: RootJsonFormat](req: HttpRequest): Future[T] = {
-    val etag = responseCache.getIfPresent(req.uri)
-    throttledRequest(etag.fold(req) {
-      case (tag, _) => req.addHeader(`If-None-Match`(tag))
-    }).flatMap {
-      case response @ HttpResponse(StatusCodes.NotModified, _, _, _) =>
-        response.discardEntityBytes()
-        etag match {
-          case Some((_, res)) => Future.successful(res.asInstanceOf[T])
-          case None =>
-            throw new Error("No changes from the cached version, but cache is empty.")
-        }
-      case response @ HttpResponse(StatusCodes.OK, _, entity, _) =>
-        val resp = Unmarshal(entity).to[T]
-        resp.foreach {
-          case r =>
-            response
-              .header[ETag]
-              .fold(())(e => responseCache.put(req.uri, (e.etag, r)))
-        }
-        resp.transform(
-          identity,
-          ex => new Error(s"Failure while deserializing response from $GitHubUrl${req.uri}", ex)
-        )
-      case response =>
-        Future.failed(
-          new Error(
-            s"Request to github service [${req.uri}] failed: got status code [${response.status}] and body [${Unmarshal(response.entity)
-              .to[String]}]"
-          )
-        )
-    }
-  }
-
-  private def api[T: RootJsonFormat](repo: String, apiPath: String = "", base: String = "/repos/"): Future[T] = {
-    val req = HttpRequest(GET, uri = s"$base$repo$apiPath")
-    throttledJson[T](req)
   }
 
   override def preStart(): Unit =

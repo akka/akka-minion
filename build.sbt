@@ -18,7 +18,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka"  %% "akka-stream"          % AkkaVersion,
   "com.typesafe.akka"  %% "akka-http"            % AkkaHttpVersion,
   "com.typesafe.akka"  %% "akka-http-spray-json" % AkkaHttpVersion,
-  "com.lihaoyi"        %% "scalatags"            % "0.8.6",
+  "com.lihaoyi"        %% "scalatags"            % "0.9.0",
   "io.spray"           %% "spray-json"           % "1.3.5",
   "com.github.blemale" %% "scaffeine"            % "4.0.0"
 )

@@ -93,7 +93,7 @@ class HttpServer(
       }
 
   override def preStart(): Unit = {
-    bindingFuture = Http(context.system).bindAndHandle(route, "0.0.0.0", settings.httpPort)
+    bindingFuture = Http(context.system).newServerAt("0.0.0.0", settings.httpPort).bindFlow(route)
     log.info(s"HTTP server started on port ${settings.httpPort}")
   }
 
@@ -155,9 +155,7 @@ object Template {
   def noDataYet(settings: Settings): TypedTag[String] =
     div(
       alert(p("No dashboard data available, yet."), "info"),
-      div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
-        a(href := s"/?team=$team", s"$team ")
-      })
+      div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield a(href := s"/?team=$team", s"$team "))
     )
 
   def mainDashboard(report: MainDashboardData, settings: Settings): TypedTag[String] = {
@@ -165,9 +163,7 @@ object Template {
 
     div(
       h2(s"Report"),
-      div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield {
-        a(href := s"/?team=$team", s"$team ")
-      }),
+      div("Teams: ", for (team <- settings.teamRepos.keys.toSeq) yield a(href := s"/?team=$team", s"$team ")),
       table(
         `class` := "table table-condensed",
         thead(
@@ -183,8 +179,8 @@ object Template {
           )
         ),
         tbody(
-          for (pull <- report.pulls.toSeq) yield {
-            tr(
+          for (pull <- report.pulls.toSeq)
+            yield tr(
               td(person(pull.author)),
               td(
                 a(
@@ -192,14 +188,13 @@ object Template {
                   target := "_blank",
                   s"${pull.repo.name}#${pull.number}: ${pull.title}"
                 ),
-                for (label <- pull.labels) yield {
-                  span(
+                for (label <- pull.labels)
+                  yield span(
                     Style.issueLabel,
                     backgroundColor := label.color.getOrElse("#111111"),
                     color := "#FFFFFF",
                     label.name
                   )
-                }
               ),
               td(Style.noWrap, pull.lastUpdated),
               td(pull.people.map(involvment).toSeq),
@@ -208,7 +203,6 @@ object Template {
               td(validationStatus(pull.status)),
               td(reviewStatus(pull))
             )
-          }
         )
       ),
       p(
@@ -226,13 +220,14 @@ object Template {
       case Some(report) =>
         def repoUrl(name: String) = s"https://github.com/$name"
 
-        def renderAction(action: PrAction): TypedTag[String] = action match {
-          case NoAction => p("N/A")
-          case PleaseReview => p("Please review")
-          case PleaseFix => p("Fix failure")
-          case PleaseResolve => p("Act on review")
-          case PleaseRebase => p("Rebase")
-        }
+        def renderAction(action: PrAction): TypedTag[String] =
+          action match {
+            case NoAction => p("N/A")
+            case PleaseReview => p("Please review")
+            case PleaseFix => p("Fix failure")
+            case PleaseResolve => p("Act on review")
+            case PleaseRebase => p("Rebase")
+          }
 
         def mkTable(data: Iterable[PersonalDashboardEntry]): TypedTag[String] =
           table(
@@ -244,8 +239,8 @@ object Template {
               )
             ),
             tbody(
-              for (entry <- data.toSeq if entry.action != NoAction) yield {
-                tr(
+              for (entry <- data.toSeq if entry.action != NoAction)
+                yield tr(
                   td(
                     a(
                       href := s"${repoUrl(entry.repo.fullName)}/pull/${entry.pr.number}",
@@ -255,7 +250,6 @@ object Template {
                   ),
                   td(renderAction(entry.action))
                 )
-              }
             )
           )
 
@@ -290,11 +284,14 @@ object Template {
     panel("Services Status", p("Github poller", ghStatus))
 
   def involvment(p: Performance): TypedTag[String] =
-    person(p.person, (p.action match {
-      case Action.Approved => Seq(Style.good)
-      case Action.RequestedChanges => Seq(Style.bad)
-      case _ => Seq()
-    }): _*)
+    person(
+      p.person,
+      (p.action match {
+        case Action.Approved => Seq(Style.good)
+        case Action.RequestedChanges => Seq(Style.bad)
+        case _ => Seq()
+      }): _*
+    )
 
   def person(p: Person, styles: Cls*): TypedTag[String] =
     a(

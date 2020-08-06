@@ -92,15 +92,15 @@ trait GithubCaller {
     }
   }
 
-  protected def api[T: RootJsonFormat](repo: String, apiPath: String = "", base: String = "/repos/")(
-      implicit um: Unmarshaller[ResponseEntity, T]
+  protected def api[T: RootJsonFormat](repo: String, apiPath: String = "", base: String = "/repos/")(implicit
+      um: Unmarshaller[ResponseEntity, T]
   ): Future[T] = {
     val req = HttpRequest(GET, uri = s"$base$repo$apiPath")
     throttledJson[T](req)
   }
 
-  protected def graphql[T: RootJsonFormat](entity: String)(
-      implicit um: Unmarshaller[ResponseEntity, T]
+  protected def graphql[T: RootJsonFormat](entity: String)(implicit
+      um: Unmarshaller[ResponseEntity, T]
   ): Future[T] = {
     val q = s"""{ "query": "${encodeQuery(entity)}" }"""
     val req = HttpRequest(POST, uri = "/graphql").withEntity(ContentTypes.`application/json`, q)

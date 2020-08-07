@@ -1,6 +1,6 @@
 package akka.minion
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ClassicActorSystemProvider, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
@@ -34,7 +34,7 @@ class HttpServer(
 
   implicit val timeout = Timeout(3.seconds)
 
-  private val route =
+  private val route = concat(
     path("status") {
       get {
         val ghStatus = serviceStatus(githubService)
@@ -43,12 +43,12 @@ class HttpServer(
 
         complete(ghStatus.map(Template.servicesStatus(_)).map(Template(_)))
       }
-    } ~
+    },
     path("overview") {
       redirect("/", StatusCodes.PermanentRedirect)
-    } ~
+    },
     pathSingleSlash {
-      parameters(Symbol("team") ?) { team =>
+      parameters("team".optional) { team =>
         get {
           val reportFuture =
             (dashboard ? GetMainDashboard)
@@ -72,7 +72,7 @@ class HttpServer(
           complete(reportFuture)
         }
       }
-    } ~
+    },
     path("personal" / Segment) { person =>
       get {
         val reportFuture =
@@ -83,6 +83,7 @@ class HttpServer(
         complete(reportFuture)
       }
     }
+  )
 
   def serviceStatus(service: ActorRef): Future[String] =
     (service ? App.ServicePing)
@@ -93,6 +94,7 @@ class HttpServer(
       }
 
   override def preStart(): Unit = {
+    implicit val system: ClassicActorSystemProvider = context.system
     bindingFuture = Http(context.system).newServerAt("0.0.0.0", settings.httpPort).bindFlow(route)
     log.info(s"HTTP server started on port ${settings.httpPort}")
   }

@@ -17,15 +17,16 @@ trait ZuluDateTimeMarshalling {
 
   implicit object DateFormat extends JsonFormat[ZonedDateTime] {
     def write(date: ZonedDateTime) = JsString(dateToIsoString(date))
-    def read(json: JsValue) = json match {
-      case JsString(rawDate) =>
-        parseIsoDateString(rawDate)
-          .fold(deserializationError(s"Expected ISO Date format, got $rawDate"))(identity)
-      case JsNumber(rawNumber) =>
-        parseEpochSeconds(rawNumber)
-          .fold(deserializationError(s"Expected Epoch Seconds, got $rawNumber"))(identity)
-      case error => deserializationError(s"Expected JsString, got $error")
-    }
+    def read(json: JsValue) =
+      json match {
+        case JsString(rawDate) =>
+          parseIsoDateString(rawDate)
+            .fold(deserializationError(s"Expected ISO Date format, got $rawDate"))(identity)
+        case JsNumber(rawNumber) =>
+          parseEpochSeconds(rawNumber)
+            .fold(deserializationError(s"Expected Epoch Seconds, got $rawNumber"))(identity)
+        case error => deserializationError(s"Expected JsString, got $error")
+      }
   }
 
   private def dateToIsoString(date: ZonedDateTime) =
@@ -55,10 +56,11 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
     final val REVIEWED = "reviewed"
     final val CLA = "cla"
 
-    def jenkinsContext(ctx: String) = ctx match {
-      case COMBINED | REVIEWED | CLA => false
-      case _ => true
-    }
+    def jenkinsContext(ctx: String) =
+      ctx match {
+        case COMBINED | REVIEWED | CLA => false
+        case _ => true
+      }
   }
 
   case class User(login: String, avatar_url: String)
@@ -119,10 +121,11 @@ object GithubService extends DefaultJsonProtocol with ZuluDateTimeMarshalling {
   ) {
     override def toString = s"Milestone $title ($state)"
 
-    def mergeBranch = description match {
-      case Some(Milestone.MergeBranch(branch)) => Some(branch)
-      case _ => None
-    }
+    def mergeBranch =
+      description match {
+        case Some(Milestone.MergeBranch(branch)) => Some(branch)
+        case _ => None
+      }
   }
 
   case class Issue(

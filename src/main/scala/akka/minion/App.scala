@@ -37,7 +37,7 @@ object App {
 
     try {
       val config = system.settings.config.getConfig("akka.minion")
-      val teamRepos: Map[String, Set[String]] = {
+      val teamRepos: Map[String, Set[String]] =
         config
           .getObjectList("team-repos")
           .asScala
@@ -48,7 +48,6 @@ object App {
             (name, repos)
           }
           .toMap
-      }
 
       val settings = Settings(
         httpPort = config.getInt("http-port"),
@@ -69,9 +68,7 @@ object App {
       case e: Throwable =>
         println("Minion lost.")
         e.printStackTrace()
-    } finally {
-      system.terminate()
-    }
+    } finally system.terminate()
   }
 }
 

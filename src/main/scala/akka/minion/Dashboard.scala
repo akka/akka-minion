@@ -29,12 +29,13 @@ object Dashboard {
     case object OpenedPr extends Action { override def importance = 1 }
     case object Dismissed extends Action { override def importance = 0 }
 
-    def toAction(review: PullRequestReview): Action = review match {
-      case r if r.commented => Action.Commented
-      case r if r.approved => Action.Approved
-      case r if r.changesRequested => Action.RequestedChanges
-      case r if r.dismissed => Action.Dismissed
-    }
+    def toAction(review: PullRequestReview): Action =
+      review match {
+        case r if r.commented => Action.Commented
+        case r if r.approved => Action.Approved
+        case r if r.changesRequested => Action.RequestedChanges
+        case r if r.dismissed => Action.Dismissed
+      }
   }
 
   sealed trait PrValidationStatus
@@ -231,12 +232,14 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
     log.info(s"Updating dashboard for $person")
 
     def actionFor(pr: PullRequest): PrAction =
-      if (pr.mergeable.getOrElse(true) &&
-          !report
-            .statuses(pr)
-            .statuses
-            .exists(_.state == CommitStatusConstants.FAILURE) &&
-          !report.reviews(pr).exists(_.user.login == person)) PleaseReview
+      if (
+        pr.mergeable.getOrElse(true) &&
+        !report
+          .statuses(pr)
+          .statuses
+          .exists(_.state == CommitStatusConstants.FAILURE) &&
+        !report.reviews(pr).exists(_.user.login == person)
+      ) PleaseReview
       else NoAction
 
     val (ownActions, teamActions, externalActions) = report.pulls
@@ -250,10 +253,12 @@ class Dashboard(settings: Settings) extends Actor with ActorLogging {
             val action =
               if (!pr.mergeable.getOrElse(true)) PleaseRebase
               else if (report.reviews(pr).exists(_.changesRequested)) PleaseResolve
-              else if (report
-                         .statuses(pr)
-                         .statuses
-                         .exists(_.state == CommitStatusConstants.FAILURE)) PleaseFix
+              else if (
+                report
+                  .statuses(pr)
+                  .statuses
+                  .exists(_.state == CommitStatusConstants.FAILURE)
+              ) PleaseFix
               else NoAction
 
             PersonalDashboardEntry(Repo(repo.name, repo.full_name), pr, action)

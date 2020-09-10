@@ -10,7 +10,7 @@ scalacOptions ++= List(
   "UTF-8"
 )
 
-val AkkaVersion = "2.6.8"
+val AkkaVersion = "2.6.9"
 val AkkaHttpVersion = "10.2.0"
 
 libraryDependencies ++= Seq(

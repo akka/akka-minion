@@ -1,3 +1,9 @@
+## Project archived
+
+We're no longer maintaining Akka Minion, though to be honest we haven't found a good alternative yet either.
+
+Let us know when you do so we can link it here!
+
 ## Overview
 
 Minion provides an overview of active pull requests (PRs) across multiple repositories. This can be helpful for teams that maintain several repositories as part of their day-to-day work, such as the Akka team.
